@@ -1,6 +1,7 @@
 import { brl, mil, pct, MES, ddmmyyyy, esc } from "../lib/format.js";
 import { HORIZONS, CDB_RATES, breakEven, curves } from "../lib/cdblca.js";
 import { bankName } from "../lib/model.js";
+import { maturitiesIcs } from "../lib/ics.js";
 import { header, needsSetup } from "./home.js";
 
 const CCOL = ["--c-bills", "--c-trans", "--c-travel", "--c-shop", "--c-health", "--c-food"];
@@ -20,6 +21,8 @@ export function render(el, ctx) {
     <div class="sub mb10">${esc(sub)}</div>
     <div class="seg">${[["90", "90 dias"], ["365", "12 meses"], ["all", "Todos"]].map(([f, l]) => `<button data-f="${f}" class="${f === filter ? "on" : ""}">${l}</button>`).join("")}</div>
     <div class="card" data-list></div>
+    <button class="btn ghost" data-a="ics">Adicionar vencimentos à agenda (.ics)</button>
+    <div class="muted mb10">Um evento por vencimento, com aviso 7 dias antes. Baixar de novo atualiza os mesmos eventos.</div>
     <div class="card">
       <div class="label">Regras de reinvestimento</div>
       <div class="rule"><i class="r-ok">1</i><span><b>Liquidez primeiro</b> — dinheiro novo curto (≤ 12 meses) ou liquidez diária: entrada do financiamento.</span></div>
@@ -40,6 +43,13 @@ export function render(el, ctx) {
       <div class="muted mt8">A linha é a LCA mínima para empatar. Acima dela, a LCA ganha; abaixo, o CDB ganha. LCA tem carência mínima de 9 meses.</div>
     </div>`;
 
+  el.querySelector('[data-a="ics"]').addEventListener("click", () => {
+    const ics = maturitiesIcs(mat.rows.filter((r) => r.days >= 0), { bankName, money: (n) => brl(n, 2) });
+    const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
+    const a = Object.assign(document.createElement("a"), { href: url, download: "cofre-vencimentos.ics" });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  });
   const list = el.querySelector("[data-list]");
   const paint = () => {
     const rows = mat.rows.filter((r) => r.days >= 0 && (filter === "all" || r.days <= +filter));

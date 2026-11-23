@@ -2,7 +2,7 @@ import { createVault, idbStorage, validPin } from "./lib/vault.js";
 import { createBio } from "./lib/bio.js";
 import { createPluggy } from "./lib/pluggy.js";
 import { compileRules } from "./lib/categorize.js";
-import { spendRows, monthView, byMonth, sum, monthRange, cardCycles, DEFAULT_TARGET } from "./lib/spend.js";
+import { spendRows, incomeRows, leftover, monthView, byMonth, sum, monthRange, cardCycles, BANK_CODES, DEFAULT_TARGET } from "./lib/spend.js";
 import { slim, holdings, cards, maturities as maturityLadder, mergeLadders, primaryEntity, bankName, alerts, shouldAutoRefresh, installmentsAhead } from "./lib/model.js";
 import { localToday, daysBetween, ddmmyyyy } from "./lib/format.js";
 import * as home from "./screens/home.js";
@@ -11,7 +11,7 @@ import * as maturities from "./screens/maturities.js";
 import * as projection from "./screens/projection.js";
 import * as settings from "./screens/settings.js";
 
-export const APP_VERSION = "0.7.1";
+export const APP_VERSION = "0.8.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, maturities, projection, settings };
 
@@ -62,6 +62,14 @@ export function buildView(data, today) {
   const avg3 = last3.reduce((a, k) => a + sum(m[k]), 0) / (last3.length || 1);
   const avgN = last12.length;
   const avg12 = last12.reduce((a, k) => a + sum(m[k]), 0) / (avgN || 1);
+  const income = incomeRows(snap, { rules, compiled, entity: me, today, cycles });
+  const key = cycles ? "cyc" : "m";
+  // Months with income data only: before Pluggy's first month there is none (the bill history has spending only).
+  const firstIncome = income.reduce((a, r) => (r[key] && r[key] < a ? r[key] : a), "9999");
+  const pastLeft = leftover(income, rows, last12.filter((k) => k > firstIncome), key);
+  const avg = (f) => pastLeft.reduce((a, r) => a + r[f], 0) / (pastLeft.length || 1);
+  const salaryFrom = [...new Set(income.filter((r) => r.kind === "salary").map((r) => BANK_CODES[r.from] || `banco ${r.from}`))];
+  const left = { now: leftover(income, rows, [month.month], key)[0], n: pastLeft.length, avg: { left: avg("regular"), salary: avg("salary"), other: avg("other"), spent: avg("spent"), oneOff: pastLeft.reduce((a, r) => a + r.oneOff, 0) }, history: pastLeft, salaryFrom };
   const joint = Object.keys(rules.entities).filter((e) => e !== me).map((e) => {
     const h = holdings(snap, rules, e);
     const pos = h.banks.flatMap((b) => b.positions).sort((a, b) => b.balance - a.balance).slice(0, 3);
@@ -76,7 +84,7 @@ export function buildView(data, today) {
     };
   });
   const v = {
-    today, rows, mine, month, avg12, avgN, avg3, joint,
+    today, rows, mine, month, avg12, avgN, avg3, joint, left,
     cards: cards(snap, rules, me, today),
     mat: mergeLadders(maturityLadder(mine, today), joint.map((j) => maturityLadder(j.holdings, today))),
     daysTo: (iso) => daysBetween(today, iso),

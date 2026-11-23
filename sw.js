@@ -1,10 +1,10 @@
 // Caches the app shell only. API calls (api.pluggy.ai) are never cached here:
 // the data lives encrypted in IndexedDB, not in the HTTP cache.
-const CACHE = "cofre-0.7.1";
+const CACHE = "cofre-0.8.0";
 const SHELL = [
   "./", "index.html", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png",
   "src/tokens.css", "src/app.css", "src/main.js",
-  "src/lib/vault.js", "src/lib/bio.js", "src/lib/pluggy.js", "src/lib/categorize.js", "src/lib/spend.js", "src/lib/model.js", "src/lib/format.js", "src/lib/cdblca.js", "src/lib/cardtx.js", "src/lib/projection.js",
+  "src/lib/vault.js", "src/lib/bio.js", "src/lib/ics.js", "src/lib/pluggy.js", "src/lib/categorize.js", "src/lib/spend.js", "src/lib/model.js", "src/lib/format.js", "src/lib/cdblca.js", "src/lib/cardtx.js", "src/lib/projection.js",
   "src/screens/home.js", "src/screens/spend.js", "src/screens/maturities.js", "src/screens/projection.js", "src/screens/settings.js",
 ];
 

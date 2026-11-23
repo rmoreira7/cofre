@@ -1,6 +1,7 @@
 // Spending: a port of the spend side of finance/pluggy/analyze.py build(), plus the clusters of design §5.
 import { categorize, learn, entityOf } from "./categorize.js";
 import { cleanCard, refundMatches, refundTarget } from "./cardtx.js";
+import { BANKS } from "./model.js";
 
 export const DEFAULT_TARGET = 7000;
 
@@ -117,6 +118,53 @@ export function spendRows(pulled, { rules, compiled, entity, today, cycles = nul
   }
   for (const r of rows) delete r._x;
   return rows;
+}
+
+// Bank codes (COMPE) → names, for the salary line. Unknown codes show as "banco <code>".
+export const BANK_CODES = { 1: "Banco do Brasil", 33: "Santander", 77: "Inter", 102: "XP", 104: "Caixa", 212: "Original", 237: "Bradesco", 260: "Nubank", 290: "PagBank", 323: "Mercado Pago", 336: "C6", 341: "Itaú", 348: "XP", 380: "PicPay", 536: "Neon", 655: "Neon" };
+const YIELD_CATS = new Set(["Proceeds interests and dividends", "Interests charged"]);
+
+// Money coming in to the entity's accounts, per cycle. Salary = a same-person transfer from a bank none of the
+// connected accounts is at (the payroll account Pluggy doesn't see); a same-person transfer between connected banks,
+// investment movements and card refunds are internal. Everything else that comes in (PIX from people, account
+// interest) is "other".
+export function incomeRows(pulled, { rules, compiled, entity, today, cycles = null }) {
+  const own = new Set(pulled.items.flatMap((it) => BANKS[it.label]?.codes || []));
+  for (const it of pulled.items) if (!it.error) for (const a of it.accounts) if (a.type !== "CREDIT") for (const t of a.transactions) if (t.amount > 0 && t.to) own.add(t.to);
+  const items = pulled.items.filter((it) => !it.error && entityOf(it.label, rules) === entity);
+  const bank = items.flatMap((it) => it.accounts.filter((a) => a.type !== "CREDIT").flatMap((a) => a.transactions));
+  const learned = { ...rules.learned, ...learn(bank.map((x) => [x.description, x.category ?? null])) };
+  const rows = [];
+  for (const x of bank) {
+    const d = x.date.slice(0, 10);
+    if (!(x.amount > 0) || d > today || x.operationType === "CARTAO") continue;
+    const c = categorize({ src: "bank", op: x.operationType, desc: x.description, pluggy: x.category ?? null }, compiled, learned, entity);
+    let kind;
+    if (SELF_CATS.has(c) || x.category === "Same person transfer") {
+      if (!x.from || own.has(x.from)) continue;
+      kind = "salary";
+    } else if (isInternal(x, c)) continue;
+    else kind = YIELD_CATS.has(c) || x.operationType === "RENDIMENTO_APLIC_FINANCEIRA" ? "yield" : "other";
+    const r = { d, m: d.slice(0, 7), amt: x.amount, kind, from: x.from || null, desc: x.description };
+    if (cycles) r.cyc = cycleOf(d, cycles);
+    rows.push(r);
+  }
+  return rows;
+}
+
+// Income − spending for one cycle (or calendar month). oneOff = single non-salary entries ≥ ONE_OFF (a sale, a
+// family transfer): real money, but kept out of `regular`, which is what averages and trends use.
+export const ONE_OFF = 5000;
+export function leftover(income, spend, months, key = "m") {
+  const per = (m) => {
+    const inc = income.filter((r) => r[key] === m);
+    const salary = inc.filter((r) => r.kind === "salary").reduce((a, r) => a + r.amt, 0);
+    const other = inc.filter((r) => r.kind !== "salary").reduce((a, r) => a + r.amt, 0);
+    const oneOff = inc.filter((r) => r.kind !== "salary" && r.amt >= ONE_OFF).reduce((a, r) => a + r.amt, 0);
+    const spent = spend.filter((r) => r[key] === m && !r.hist).reduce((a, r) => a + r.amt, 0);
+    return { month: m, salary, other, oneOff, income: salary + other, spent, left: salary + other - spent, regular: salary + other - oneOff - spent };
+  };
+  return months.map(per);
 }
 
 function row(d, amt, cat, src, x, cycles) {

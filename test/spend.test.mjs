@@ -111,3 +111,25 @@ test("bill history: one source per cycle, statement refunds net, 24-month card-o
   assert.deepEqual(v.yearAgo, null);
   assert.equal(monthView(rows.filter((r) => !r.hist), { today: "2026-11-23", cycles }).long, null);
 });
+
+test("income: salary = same-person transfer from an unconnected bank; leftover per cycle", async () => {
+  const { incomeRows, leftover } = await import("../src/lib/spend.js");
+  const t = (date, amount, description, category, from, op = "PIX") => ({ date: `${date}T12:00:00Z`, amount, description, operationType: op, category, status: "POSTED", ...(from ? { from } : {}) });
+  const p = { items: [
+    { label: "nubank", accounts: [{ type: "BANK", transactions: [
+      t("2026-11-05", 7000, "Transferência Recebida|ME", "Same person transfer", "237"),
+      t("2026-11-06", 3000, "Transferência Recebida|ME", "Same person transfer", "348"),
+      t("2026-11-07", 500, "Resgate RDB", "Investments", null, "RESGATE_APLIC_FINANCEIRA"),
+      t("2026-11-08", 120, "Pix recebido Friend", "Transfer - PIX", "1"),
+      t("2026-11-09", 2, "Rendimento", "Proceeds interests and dividends", null, "RENDIMENTO_APLIC_FINANCEIRA"),
+      t("2026-11-10", -100, "Pix enviado Someone", "Transfer - PIX"),
+      t("2026-12-01", 9999, "Future", "Same person transfer", "237"),
+    ] }] },
+    { label: "xp", accounts: [{ type: "BANK", transactions: [] }] },
+  ] };
+  const r = { ...rules, entities: { me: { banks: ["nubank", "xp"] } } };
+  const inc = incomeRows(p, { rules: r, compiled: compileRules(r), entity: "me", today: "2026-11-23" });
+  assert.deepEqual(inc.map((x) => [x.amt, x.kind]), [[7000, "salary"], [120, "other"], [2, "yield"]]);
+  const [m] = leftover(inc, [{ m: "2026-11", amt: 5000 }, { m: "2026-11", amt: 99, hist: true }], ["2026-11"]);
+  assert.deepEqual(m, { month: "2026-11", salary: 7000, other: 122, oneOff: 0, income: 7122, spent: 5000, left: 2122, regular: 2122 });
+});

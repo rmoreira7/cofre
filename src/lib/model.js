@@ -4,12 +4,13 @@ import { reservedHoldings } from "./pluggy.js";
 import { daysBetween } from "./format.js";
 import { cleanCard } from "./cardtx.js";
 
+// codes: the bank's COMPE codes, so a transfer from a connected bank is recognised as internal.
 export const BANKS = {
-  nubank: { name: "Nubank", color: "#8a05be" },
-  xp: { name: "XP", color: "var(--ink)" },
-  itau: { name: "Itaú", color: "var(--joint)" },
-  neon: { name: "Neon", color: "#00a3b4" },
-  mercadopago: { name: "Mercado Pago", color: "#00b1ea" },
+  nubank: { name: "Nubank", color: "#8a05be", codes: ["260"] },
+  xp: { name: "XP", color: "var(--ink)", codes: ["102", "348"] },
+  itau: { name: "Itaú", color: "var(--joint)", codes: ["341"] },
+  neon: { name: "Neon", color: "#00a3b4", codes: ["536", "655"] },
+  mercadopago: { name: "Mercado Pago", color: "#00b1ea", codes: ["323"] },
 };
 export const bankName = (label) => BANKS[label]?.name || label;
 export const CONCENTRATION = 0.4;
@@ -36,6 +37,10 @@ export function slim(pulled) {
           bills: a.bills?.map((b) => pick(b, ["dueDate", "totalAmount", "billClosingDate"])),
           transactions: (a.type === "CREDIT" ? cleanCard(a.transactions) : a.transactions).map((t) => {
             const out = pick(t, TX);
+            // Bank codes only (never account numbers): who sent and who received a transfer, for income detection.
+            const pd = t.paymentData;
+            if (pd?.payer?.routingNumber) out.from = String(Number(pd.payer.routingNumber));
+            if (pd?.receiver?.routingNumber) out.to = String(Number(pd.receiver.routingNumber));
             const m = t.creditCardMetadata;
             if (m) out.card = pick(m, ["billForecastDate", "paymentType", "installmentNumber", "totalInstallments", "purchaseDate"]);
             return out;
