@@ -1,6 +1,6 @@
 // Spending: a port of the spend side of finance/pluggy/analyze.py build(), plus the clusters of design §5.
 import { categorize, learn, entityOf } from "./categorize.js";
-import { cleanCard } from "./cardtx.js";
+import { cleanCard, refundMatches, refundTarget } from "./cardtx.js";
 
 export const DEFAULT_TARGET = 7000;
 
@@ -73,16 +73,26 @@ export function cycleBounds(label, cycles) {
 
 export function spendRows(pulled, { rules, compiled, entity, today, cycles = null }) {
   const items = pulled.items.filter((it) => !it.error && entityOf(it.label, rules) === entity);
-  const card = [], bank = [];
-  for (const it of items) for (const a of it.accounts) (a.type === "CREDIT" ? card : bank).push(...(a.type === "CREDIT" ? cleanCard(a.transactions) : a.transactions));
+  const card = [], bank = [], refunds = new Map();
+  for (const it of items) for (const a of it.accounts) {
+    if (a.type !== "CREDIT") { bank.push(...a.transactions); continue; }
+    const txs = cleanCard(a.transactions);
+    card.push(...txs);
+    for (const [r, o] of refundMatches(txs)) refunds.set(r, o);
+  }
   const learned = { ...rules.learned, ...learn([...card, ...bank].map((x) => [x.description, x.category ?? null])) };
   const cat = (src, x) => categorize({ src, op: x.operationType, desc: x.description, pluggy: x.category ?? null }, compiled, learned, entity);
 
   const rows = [];
   for (const x of card) {
     const d = x.date.slice(0, 10);
-    if (d > today || x.operationType === "PAGAMENTO_FATURA" || !(x.amount > 0)) continue;
-    rows.push(row(d, x.amount, cat("card", x), "card", x, cycles));
+    if (d > today || x.operationType === "PAGAMENTO_FATURA") continue;
+    if (x.amount > 0) rows.push(row(d, x.amount, cat("card", x), "card", x, cycles));
+    else if (refunds.has(x)) {
+      const orig = refunds.get(x);
+      const c = orig ? cat("card", orig) : /^IOF/i.test(x.description) ? "Tax on financial operations" : cat("card", { ...x, description: refundTarget(x.description), category: null });
+      rows.push(row(d, x.amount, c, "card", x, cycles));
+    }
   }
   for (const x of bank) {
     const d = x.date.slice(0, 10);

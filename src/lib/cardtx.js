@@ -60,3 +60,35 @@ export function cleanCard(transactions) {
   const g = ghostIds(transactions);
   return g.size ? transactions.filter((t) => !g.has(t.id)) : transactions;
 }
+
+// Refund credits ("IOF de volta de …", "Estorno de …") net against spending in the category of the charge they reverse:
+// the positive card charge of the same amount from 60 days before to 3 days after (IOF reversals can post a day early),
+// nearest date first, each charge used once. IOF reversals only match IOF charges. Unmatched → null, except a refund
+// within 60 days of the card's first row: its charge may predate the data, so it is left out (no entry).
+export const REFUND_DESC = /^(IOF de volta de|Estorno de)\s*/i;
+export const refundTarget = (desc) => desc.replace(REFUND_DESC, "").replace(/\s*-\s*NuPay\s*$/i, "");
+const IOF = /^IOF\b/i;
+const day = (t) => Date.parse(t.date.slice(0, 10) + "T12:00:00Z") / 864e5;
+
+export function isRefund(t) {
+  return t.amount < 0 && t.operationType !== "PAGAMENTO_FATURA" && REFUND_DESC.test(t.description);
+}
+
+export function refundMatches(transactions) {
+  const charges = transactions.filter((t) => t.amount > 0);
+  const used = new Set(), out = new Map();
+  const first = Math.min(...transactions.map(day));
+  for (const r of transactions.filter(isRefund).sort((a, b) => a.date.localeCompare(b.date))) {
+    const iof = IOF.test(r.description);
+    let best = null;
+    for (const c of charges) {
+      if (used.has(c) || cents(c.amount) !== cents(-r.amount) || IOF.test(c.description) !== iof) continue;
+      const gap = day(r) - day(c);
+      if (gap < -3 || gap > 60) continue;
+      if (!best || Math.abs(gap) < Math.abs(day(r) - day(best))) best = c;
+    }
+    if (best) used.add(best);
+    if (best || day(r) - first > 60) out.set(r, best);
+  }
+  return out;
+}

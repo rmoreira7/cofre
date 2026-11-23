@@ -33,3 +33,32 @@ test("genuine plans and late refunds are untouched", () => {
   const noFirst = [inst("Old Example", 5, 6, 10, "2026-11-01", "2026-06-01"), inst("Old Example", 6, 6, 10, "2026-12-01", "2026-06-01", "PENDING")];
   assert.equal(ghostIds(noFirst).size, 0);
 });
+
+test("refunds net against the charge they reverse, in its category", async () => {
+  const { refundMatches } = await import("../src/lib/cardtx.js");
+  const { compileRules } = await import("../src/lib/categorize.js");
+  const { spendRows } = await import("../src/lib/spend.js");
+  const t = (id, date, amount, description, category = "Eating out", operationType = "X") => ({ id, date: `${date}T12:00:00Z`, amount, description, category, operationType, status: "POSTED" });
+  const txs = [
+    t("a", "2026-01-01", 10, "Opening buy"),
+    t("old", "2026-01-20", -99, "Estorno de compra", "Shopping"),
+    t("c1", "2026-03-10", 50, "Shoe Store", "Clothing"),
+    t("i1", "2026-03-11", 3.5, "IOF de compra internacional", "Tax on financial operations"),
+    t("ir", "2026-03-10", -3.5, "IOF de volta de Shoe Store", "Clothing"),
+    t("cr", "2026-03-20", -50, "Estorno de compra", "Shopping"),
+    t("ur", "2026-03-21", -7, "Estorno de Fancy Cab - NuPay", "Transfers"),
+    t("pay", "2026-03-25", -500, "Pagamento recebido", "Transfers", "PAGAMENTO_FATURA"),
+  ];
+  const m = refundMatches(txs);
+  const byId = (id) => [...m].find(([r]) => r.id === id);
+  assert.equal(byId("old"), undefined);
+  assert.equal(byId("ir")[1].id, "i1");
+  assert.equal(byId("cr")[1].id, "c1");
+  assert.equal(byId("ur")[1], null);
+  assert.equal(byId("pay"), undefined);
+  const rules = { format: "cofre-rules", v: 1, entities: { me: { banks: ["b"] } }, entity_rules: {}, desc_rules: [], overrides: {}, learned: { "fancy cab": "Taxi and ride-hailing" } };
+  const rows = spendRows({ items: [{ label: "b", accounts: [{ type: "CREDIT", transactions: txs }] }] }, { rules, compiled: compileRules(rules), entity: "me", today: "2026-12-31" });
+  const net = {};
+  for (const r of rows) net[r.cat] = (net[r.cat] || 0) + r.amt;
+  assert.deepEqual(net, { "Eating out": 10, Clothing: 0, "Tax on financial operations": 0, "Taxi and ride-hailing": -7 });
+});
