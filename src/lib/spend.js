@@ -22,7 +22,7 @@ export const clusterOf = (cat) => CLUSTER_OF.get(cat) || "other";
 
 const SELF_CATS = new Set(["Same person transfer", "Transfer - Internal"]);
 const INTERNAL_CATS = new Set([...SELF_CATS, "Investments"]);
-const INTERNAL_DESC = /^(Pagamento de fatura|Aplicação|Vencimento|Resgate)|COMPRA (CDB|CDI|LC[AI]?|CR[AI]|FUNDO|TESOURO)|conta investimento|conta digital|FUNDO GARANTIDOR/i;
+const INTERNAL_DESC = /^(Pagamento de fatura|Aplicação|Vencimento|Resgate)|COMPRA (CDB|CDI|LC[AI]?|CR[AI]|FUNDO|TESOURO)|APLICA[CÇ][AÃ]O (CDB|CDI|LC[AI]?|CR[AI]|FUNDO|TESOURO)|COR COMP (CDB|LC[AI]|CR[AI])|conta investimento|conta digital|FUNDO GARANTIDOR/i;
 
 export function isInternal(x, cat) {
   return INTERNAL_CATS.has(cat) || x.operationType === "RESGATE_APLIC_FINANCEIRA" || INTERNAL_DESC.test(x.description);
