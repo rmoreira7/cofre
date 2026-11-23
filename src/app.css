@@ -119,3 +119,15 @@ body.busy [data-a="refresh"] svg{animation:spin 1s linear infinite}
 .alert-card .label{color:var(--warn)}
 small.block{display:block;color:var(--ink-3);font-size:12px;font-weight:400}
 small.block.stale{color:var(--warn)}
+button.bar.tap{display:block;width:100%;border:0;background:none;color:inherit;font:inherit;text-align:left;padding:0;cursor:pointer}
+.bar .caret{font-style:normal;color:var(--ink-3);display:inline-block;transition:transform .15s}
+.bar.open .caret{transform:rotate(90deg)}
+.buys{margin:8px 0 4px;border-left:3px solid var(--line);padding-left:10px}
+.buy{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.buy:last-child{border-bottom:0}
+.buy .l{display:flex;flex-direction:column;min-width:0}
+.buy .l span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.buy .l small{color:var(--ink-3);font-size:12px}
+.buy .r{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}
+.buy select{max-width:150px;font:12px/1.2 inherit;font-family:inherit;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:4px 6px}
+.sm-pad{padding:6px 0 4px;font-size:12px}

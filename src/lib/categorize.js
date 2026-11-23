@@ -63,7 +63,10 @@ function genericRules(src, op, upper, pluggy) {
 }
 
 // rules: output of compileRules(). src: "card" | "bank". entity: key of rules.entities.
+// User overrides (set on the phone) win over every rule; they are keyed by key(desc), the merchant.
 export function categorize({ src, op, desc, pluggy }, rules, learned, entity) {
+  const user = rules?.user?.[key(desc)];
+  if (user) return user;
   const upper = desc.toUpperCase();
   for (const r of rules?.entityRules[entity] || []) if (r.rx.test(upper)) return r.category;
   for (const r of rules?.descRules || []) if (r.rx.test(upper)) return r.category;
@@ -95,7 +98,7 @@ export function parseRulesFile(text) {
   return raw;
 }
 
-export function compileRules(raw) {
+export function compileRules(raw, user = {}) {
   const one = (r) => {
     if (typeof r?.pattern !== "string" || typeof r?.category !== "string" || !/^i?$/.test(r.flags ?? "")) throw new Error("Regra inválida.");
     try { return { rx: new RegExp(r.pattern, r.flags || ""), category: r.category }; }
@@ -106,6 +109,7 @@ export function compileRules(raw) {
     entityRules: Object.fromEntries(Object.entries(raw.entity_rules || {}).map(([k, v]) => [k, v.map(one)])),
     descRules: (raw.desc_rules || []).map(one),
     overrides: raw.overrides,
+    user: user || {},
     learned: raw.learned,
     exportedAt: raw.exported_at,
   };
@@ -115,4 +119,9 @@ export function rulesSummary(raw) {
   if (!raw) return null;
   const nRx = Object.values(raw.entity_rules || {}).reduce((a, v) => a + v.length, 0) + (raw.desc_rules || []).length;
   return { learned: Object.keys(raw.learned).length, overrides: Object.keys(raw.overrides).length, regex: nRx, exportedAt: raw.exported_at };
+}
+
+export const USER_FORMAT = "cofre-user-overrides";
+export function exportUserOverrides(user) {
+  return JSON.stringify({ format: USER_FORMAT, v: 1, exported_at: new Date().toISOString(), overrides: user || {} }, null, 1);
 }

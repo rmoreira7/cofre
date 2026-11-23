@@ -2,7 +2,7 @@ import { createVault, idbStorage, validPin } from "./lib/vault.js";
 import { createPluggy } from "./lib/pluggy.js";
 import { compileRules } from "./lib/categorize.js";
 import { spendRows, monthView, byMonth, sum, monthRange, cardCycles, DEFAULT_TARGET } from "./lib/spend.js";
-import { slim, holdings, cards, maturities as maturityLadder, primaryEntity, bankName, alerts, shouldAutoRefresh } from "./lib/model.js";
+import { slim, holdings, cards, maturities as maturityLadder, primaryEntity, bankName, alerts, shouldAutoRefresh, installmentsAhead } from "./lib/model.js";
 import { localToday, daysBetween, ddmmyyyy } from "./lib/format.js";
 import * as home from "./screens/home.js";
 import * as spend from "./screens/spend.js";
@@ -10,7 +10,7 @@ import * as maturities from "./screens/maturities.js";
 import * as projection from "./screens/projection.js";
 import * as settings from "./screens/settings.js";
 
-export const APP_VERSION = "0.4.0";
+export const APP_VERSION = "0.5.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, maturities, projection, settings };
 
@@ -27,6 +27,11 @@ const ctx = {
   async save(data) { await vault.save(data); state.data = data; state.view = null; },
   view: () => (state.view ||= buildView(state.data, localToday())),
   refresh,
+  async setOverride(k, category) {
+    const u = { ...(state.data.userOverrides || {}) };
+    if (category) u[k] = category; else delete u[k];
+    await ctx.save({ ...state.data, userOverrides: u });
+  },
   lock,
   async wipe() { await vault.wipe(); location.reload(); },
   go,
@@ -35,7 +40,7 @@ const ctx = {
 // Everything the screens show, derived once per data change.
 export function buildView(data, today) {
   const rules = data.rules;
-  const compiled = compileRules(rules);
+  const compiled = compileRules(rules, data.userOverrides || {});
   const snap = data.snapshot;
   const s = data.settings || {};
   const me = primaryEntity(rules);
@@ -68,6 +73,7 @@ export function buildView(data, today) {
     mat: maturityLadder(mine, today),
     daysTo: (iso) => daysBetween(today, iso),
   };
+  v.installments = installmentsAhead(snap, rules, me, today);
   v.alerts = alerts(v, { idleCash: s.idleCash ?? 5000, cdbMin: s.cdbMin ?? 110 });
   return v;
 }

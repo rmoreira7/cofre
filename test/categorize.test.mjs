@@ -49,3 +49,10 @@ test("entityOf and rulesSummary", () => {
   assert.equal(entityOf("zzz", raw), null);
   assert.deepEqual(rulesSummary(raw), { learned: 1, overrides: 1, regex: 2, exportedAt: raw.exported_at });
 });
+
+test("user overrides win over every rule, keyed by merchant", () => {
+  const r = compileRules(raw, { "acme rent ltda": "Housing", "coffee shop": "Leisure" });
+  assert.equal(categorize({ src: "bank", op: "PIX", desc: "acme rent ltda", pluggy: "Transfers" }, r, {}, "b"), "Housing");
+  assert.equal(categorize({ src: "card", op: "X", desc: "COFFEE SHOP 2/3", pluggy: "Shopping" }, r, {}, "a"), "Leisure");
+  assert.equal(categorize({ src: "card", op: "X", desc: "other", pluggy: "Shopping" }, r, {}, "a"), "Shopping");
+});

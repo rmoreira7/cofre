@@ -1,4 +1,4 @@
-import { parseRulesFile, rulesSummary } from "../lib/categorize.js";
+import { parseRulesFile, rulesSummary, exportUserOverrides } from "../lib/categorize.js";
 import { CLUSTERS, DEFAULT_TARGET } from "../lib/spend.js";
 import { brl, ddmmyyyy, esc, when } from "../lib/format.js";
 import { itemStatus } from "../lib/model.js";
@@ -56,9 +56,11 @@ export function render(el, ctx) {
       <div class="field"><span>Exportado em</span><span>${new Date(rules.exportedAt).toLocaleDateString("pt-BR")}</span></div>`
         : `<div class="field"><span>Status</span><span>não importadas</span></div>
       <div class="muted">Gere no notebook com <code>export_rules.py</code> e importe o arquivo aqui. Ele fica só neste aparelho, criptografado.</div>`}
+      <div class="field"><span>Ajustes feitos no celular</span><span>${Object.keys(d.userOverrides || {}).length}</span></div>
       <div class="err" role="alert" data-e="rules"></div>
       <input type="file" accept=".json,application/json" data-i="rules" hidden>
       <button class="btn ghost" data-a="import">${rules ? "Substituir arquivo de regras" : "Importar arquivo de regras"}</button>
+      ${Object.keys(d.userOverrides || {}).length ? '<button class="btn ghost" data-a="export">Exportar ajustes para o notebook</button>' : ""}
     </div>
     <div class="card">
       <div class="label">Metas</div>
@@ -124,6 +126,12 @@ export function render(el, ctx) {
     if (a === "edit") { el.dataset.edit = "1"; render(el, ctx); }
     if (a === "cancel") { delete el.dataset.edit; render(el, ctx); }
     if (a === "import") el.querySelector('[data-i="rules"]').click();
+    if (a === "export") {
+      const url = URL.createObjectURL(new Blob([exportUserOverrides(ctx.data.userOverrides)], { type: "application/json" }));
+      const link = Object.assign(document.createElement("a"), { href: url, download: `cofre-ajustes-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.json` });
+      document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
     if (a === "wipe" && confirm("Apagar PIN, credenciais e dados deste aparelho?")) await ctx.wipe();
   });
   el.querySelector('[data-i="rules"]').addEventListener("change", async (e) => {

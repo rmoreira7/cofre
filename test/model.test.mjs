@@ -104,3 +104,16 @@ test("alerts: bill soon, maturity soon, idle cash; ranked", async () => {
   const a = alerts(v, { idleCash: 5000 });
   assert.deepEqual(a.map((x) => [x.kind, x.bank || x.issuer, x.scope || ""]), [["bill", "Card", ""], ["maturity", "Alfa", ""], ["idle", "J", "joint"], ["idle", "B", "mine"]]);
 });
+
+test("installmentsAhead: months after the open bill, grouped by plan", async () => {
+  const { installmentsAhead } = await import("../src/lib/model.js");
+  const t = (desc, amount, f, n, purchaseDate = "2026-11-07") => ({ description: desc, amount, operationType: "X", card: { paymentType: "INSTALLMENT", billForecastDate: f, installmentNumber: n, totalInstallments: 3, purchaseDate } });
+  const snap = { items: [{ label: "nu", accounts: [{ type: "CREDIT", credit: { balanceDueDate: "2026-11-03" }, transactions: [
+    t("Trip Example 1/3", 100, "2026-12", 1), t("Trip Example 2/3", 100, "2027-01", 2), t("Trip Example 3/3", 100, "2027-02", 3),
+    t("Shop Example 2/3", 30, "2027-01", 2, "2026-10-01"), { description: "single", amount: 50, operationType: "X", card: { paymentType: "SINGLE", billForecastDate: "2027-01" } },
+  ] }] }] };
+  const r = installmentsAhead(snap, { entities: { me: { banks: ["nu"] } } }, "me", "2026-11-23");
+  assert.deepEqual(r.months, [{ month: "2027-01", amount: 130 }, { month: "2027-02", amount: 100 }]);
+  assert.equal(r.total, 230);
+  assert.deepEqual(r.plans.map((p) => [p.name, p.left, p.per, p.last]), [["Trip Example", 2, 100, "2027-02"], ["Shop Example", 1, 30, "2027-01"]]);
+});

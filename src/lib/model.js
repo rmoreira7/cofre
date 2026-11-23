@@ -207,3 +207,31 @@ export function openBill(account, due) {
   if (!charges && !ahead) return { bill: account.balance || 0, ahead: 0, exact: false };
   return { bill: Math.max(0, charges - early), charges, early, ahead, exact: true };
 }
+
+// Installments already committed to bills after the open one, per month and per purchase plan.
+export function installmentsAhead(snapshot, rules, entity, today) {
+  const months = {}, plans = new Map();
+  for (const it of snapshot.items) {
+    if (it.error || entityOf(it.label, rules) !== entity) continue;
+    for (const a of it.accounts) {
+      if (a.type !== "CREDIT") continue;
+      const due = nextDue(a.credit?.balanceDueDate, today);
+      if (!due) continue;
+      const open = due.slice(0, 7);
+      for (const t of a.transactions || []) {
+        const c = t.card;
+        if (c?.paymentType !== "INSTALLMENT" || t.operationType === "PAGAMENTO_FATURA") continue;
+        const f = c.billForecastDate?.slice(0, 7);
+        if (!f || f <= open) continue;
+        months[f] = (months[f] || 0) + t.amount;
+        const name = t.description.split("|").at(-1).replace(/\s*\d+\/\d+\s*$/, "").replace(/\s+-?\s*NuPay\s*$/i, "").trim();
+        const k = `${it.label}|${name.toLowerCase()}|${(c.purchaseDate || "").slice(0, 10)}|${c.totalInstallments}`;
+        const p = plans.get(k) || { bank: it.label, name, total: c.totalInstallments, left: 0, amount: 0, per: t.amount, last: f };
+        p.left++; p.amount += t.amount; if (f > p.last) p.last = f;
+        plans.set(k, p);
+      }
+    }
+  }
+  const list = Object.entries(months).sort(([a], [b]) => a.localeCompare(b)).map(([month, amount]) => ({ month, amount }));
+  return { months: list, total: list.reduce((a, m) => a + m.amount, 0), plans: [...plans.values()].sort((a, b) => b.amount - a.amount) };
+}
