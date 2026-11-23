@@ -89,3 +89,28 @@ html,body{min-height:100%}
 .keypad button{height:64px;border-radius:20px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-weight:600;font-size:24px;font-family:inherit}
 .keypad button.ghost{background:none;border:0;font-size:15px;color:var(--ink-2)}
 .err{color:var(--bad);font-size:14px;min-height:20px}
+
+.sub.stale{color:var(--warn);font-weight:600}
+.ink{color:var(--ink)}.ok{color:var(--ok)!important}.bad{color:var(--bad)!important}.nowrap{white-space:nowrap}.grow{flex:1}
+.mt4{margin-top:4px}.mt6{margin-top:6px}.mt8{margin-top:8px}.mt10{margin-top:10px}.mb10{margin:-6px 2px 12px}
+.others{margin-top:8px;padding:8px 12px;background:var(--surface-2);border-radius:10px}
+.others .sm{margin-top:4px;font-size:13px}
+.label.joint{color:var(--joint)}
+.kpi.bad{color:var(--bad)}
+.rule i.r-ok{background:var(--brand-soft);color:var(--brand)}
+.rule i.r-bad{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+.rule i.r-warn{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.in{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink-2);font-weight:600;margin:10px 0}
+.in.row{flex-direction:row;align-items:center;justify-content:space-between;margin:6px 0}
+.in input,.in textarea{font:15px/1.4 inherit;font-family:inherit;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px;width:100%}
+.in.row input{width:120px;text-align:right}
+.in textarea{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;resize:vertical}
+details{margin:8px 0}
+summary{cursor:pointer;padding:10px 0;font-size:14.5px;display:flex;justify-content:space-between;list-style:none}
+summary::-webkit-details-marker{display:none}
+.btn.danger{color:var(--bad)}
+.btn+.btn{margin-top:8px}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;background:var(--surface-2);padding:1px 5px;border-radius:5px}
+body.busy [data-a="refresh"] svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){body.busy [data-a="refresh"] svg{animation:none}}

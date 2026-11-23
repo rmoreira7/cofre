@@ -67,3 +67,15 @@ test("save while locked is refused", async () => {
   const v = createVault(memory(), fast);
   await assert.rejects(v.save(sample), /locked/);
 });
+
+test("large payloads (≥ 1 MB) seal and unseal", async () => {
+  const s = memory();
+  const big = { rows: Array.from({ length: 12000 }, (_, i) => ({ id: i, description: "x".repeat(80) })) };
+  const v = createVault(s, fast);
+  await v.create("123456", big);
+  v.lock();
+  assert.equal((await v.unlock("123456")).rows.length, 12000);
+  await v.save({ ...big, more: true });
+  v.lock();
+  assert.equal((await v.unlock("123456")).more, true);
+});

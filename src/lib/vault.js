@@ -6,7 +6,13 @@ export const MAX_ATTEMPTS = 10;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+// Chunked: spreading a large buffer into fromCharCode overflows the call stack (~100k+ bytes).
+const b64 = (buf) => {
+  const u = new Uint8Array(buf);
+  let s = "";
+  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return btoa(s);
+};
 const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
 export async function deriveKey(pin, salt, iterations = ITERATIONS) {
