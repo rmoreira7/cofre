@@ -61,14 +61,17 @@ export function cleanCard(transactions) {
   return g.size ? transactions.filter((t) => !g.has(t.id)) : transactions;
 }
 
-// Refund credits ("IOF de volta de …", "Estorno de …") net against spending in the category of the charge they reverse:
+// Refund credits ("IOF de volta de …", "Estorno de …", and the statements' `Crédito de "<merchant>"`) net against spending in the category of the charge they reverse:
 // the positive card charge of the same amount from 60 days before to 3 days after (IOF reversals can post a day early),
-// nearest date first, each charge used once. IOF reversals only match IOF charges. Unmatched → null, except a refund
+// nearest date first, each charge used once; failing that, the latest charge from the same merchant within 365 days.
+// IOF reversals only match IOF charges. Unmatched → null, except a refund
 // within 60 days of the card's first row: its charge may predate the data, so it is left out (no entry).
-export const REFUND_DESC = /^(IOF de volta de|Estorno de)\s*/i;
-export const refundTarget = (desc) => desc.replace(REFUND_DESC, "").replace(/\s*-\s*NuPay\s*$/i, "");
+export const REFUND_DESC = /^(IOF de volta de|Estorno de|Crédito de)\s*/i;
+export const refundTarget = (desc) => desc.replace(REFUND_DESC, "").replace(/^"(.*)"$/, "$1").replace(/\s*-\s*NuPay\s*$/i, "");
 const IOF = /^IOF\b/i;
 const day = (t) => Date.parse(t.date.slice(0, 10) + "T12:00:00Z") / 864e5;
+
+const merchant = (d) => d.toLowerCase().replace(/\s*-\s*parcela\s*\d+\/\d+\s*$/, "").replace(/\s+/g, " ").trim();
 
 export function isRefund(t) {
   return t.amount < 0 && t.operationType !== "PAGAMENTO_FATURA" && REFUND_DESC.test(t.description);
@@ -88,6 +91,15 @@ export function refundMatches(transactions) {
       if (!best || Math.abs(gap) < Math.abs(day(r) - day(best))) best = c;
     }
     if (best) used.add(best);
+    else {
+      // No charge of the same amount (partial refund, exchange-rate difference): the latest charge from the same
+      // merchant in the 365 days before. Not marked used — one purchase can have several partial refunds.
+      const name = merchant(refundTarget(r.description));
+      for (const c of charges) {
+        const gap = day(r) - day(c);
+        if (gap >= 0 && gap <= 365 && IOF.test(c.description) === iof && merchant(c.description) === name && (!best || day(c) > day(best))) best = c;
+      }
+    }
     if (best || day(r) - first > 60) out.set(r, best);
   }
   return out;

@@ -94,6 +94,12 @@ export function parseRulesFile(text) {
   const isMap = (m) => m && typeof m === "object" && !Array.isArray(m) && Object.values(m).every((v) => typeof v === "string");
   if (!isMap(raw.learned) || !isMap(raw.overrides)) throw new Error("Mapa de categorias inválido.");
   if (raw.projection != null && (typeof raw.projection !== "object" || !Array.isArray(raw.projection.salary))) throw new Error("Premissas da projeção inválidas.");
+  if (raw.history != null) {
+    const h = raw.history, ym = /^\d{4}-\d{2}$/, ymd = /^\d{4}-\d{2}-\d{2}$/;
+    const ok = h && typeof h.bank === "string" && ym.test(h.until) && Array.isArray(h.rows)
+      && h.rows.every((r) => Array.isArray(r) && ym.test(r[0]) && ymd.test(r[1]) && typeof r[2] === "string" && Number.isFinite(r[3]));
+    if (!ok) throw new Error("Histórico de faturas inválido.");
+  }
   compileRules(raw);
   return raw;
 }

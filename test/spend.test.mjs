@@ -80,3 +80,34 @@ test("card cycles: card rows follow their bill, account rows follow the closing 
   assert.equal(v.end, "2026-11-26");
   assert.equal(v.daysLeft, 4);
 });
+
+test("bill history: one source per cycle, statement refunds net, 24-month card-only series", async () => {
+  const { cardCycles } = await import("../src/lib/spend.js");
+  const hr = { ...rules, learned: { "grand hotel": "Accomodation" }, history: { bank: "b1", until: "2026-10", rows: [
+    ["2026-09", "2026-08-30", "Grand Hotel", 900],
+    ["2026-10", "2026-09-28", "Restaurant", 100],
+    ["2026-10", "2026-10-05", 'Crédito de "GRAND HOTEL"', -800],
+    ["2026-10", "2026-10-06", "Desconto Antecipação Shop", -5],
+  ] } };
+  const card = { type: "CREDIT", bills: [{ dueDate: "2026-11-03", billClosingDate: "2026-10-27" }, { dueDate: "2026-12-03", billClosingDate: "2026-11-26" }], transactions: [
+    { id: "p1", date: "2026-10-20T12:00:00Z", amount: 70, description: "Partial cycle buy", operationType: "X", category: "Eating out", card: { billForecastDate: "2026-11" } },
+    { id: "p2", date: "2026-11-10T12:00:00Z", amount: 40, description: "Covered buy", operationType: "X", category: "Eating out", card: { billForecastDate: "2026-12" } },
+  ] };
+  const bank = { type: "BANK", transactions: [{ date: "2026-11-05T12:00:00Z", amount: -30, description: "Pix A", operationType: "PIX", category: "Transfer - PIX" }] };
+  const p = { items: [{ label: "b1", accounts: [card, bank] }] };
+  const cycles = cardCycles(p, { rules: hr, entity: "me" });
+  const rows = spendRows(p, { rules: hr, compiled: compileRules(hr), entity: "me", today: "2026-11-23", cycles });
+  assert.deepEqual(rows.map((r) => [r.desc, r.cyc, r.amt, r.hist ?? false]), [
+    ["Covered buy", "2026-11", 40, false],
+    ["Grand Hotel", "2026-09", 900, true],
+    ["Restaurant", "2026-10", 100, true],
+    ['Crédito de "GRAND HOTEL"', "2026-10", -800, true],
+    ["Pix A", "2026-11", 30, false],
+  ]);
+  assert.equal(rows.find((r) => r.amt === -800).cat, "Accomodation");
+  const v = monthView(rows, { today: "2026-11-23", cycles });
+  assert.equal(v.long.length, 24);
+  assert.deepEqual(v.long.slice(-3).map((h) => [h.month, h.spent, h.cardOnly ?? false]), [["2026-09", 900, true], ["2026-10", -700, true], ["2026-11", 70, false]]);
+  assert.deepEqual(v.yearAgo, null);
+  assert.equal(monthView(rows.filter((r) => !r.hist), { today: "2026-11-23", cycles }).long, null);
+});

@@ -73,26 +73,40 @@ export function cycleBounds(label, cycles) {
 
 export function spendRows(pulled, { rules, compiled, entity, today, cycles = null }) {
   const items = pulled.items.filter((it) => !it.error && entityOf(it.label, rules) === entity);
-  const card = [], bank = [], refunds = new Map();
+  const card = [], bank = [], refunds = new Map(), histBank = new Set();
+  const h = rules.history && entityOf(rules.history.bank, rules) === entity ? rules.history : null;
   for (const it of items) for (const a of it.accounts) {
     if (a.type !== "CREDIT") { bank.push(...a.transactions); continue; }
     const txs = cleanCard(a.transactions);
     card.push(...txs);
+    if (h && it.label === h.bank) txs.forEach((t) => histBank.add(t));
     for (const [r, o] of refundMatches(txs)) refunds.set(r, o);
   }
+  // Bill history (CSV statements) for the cycles before Pluggy's data: it replaces that bank's card rows up to
+  // h.until, so each cycle has exactly one source. In calendar mode, only history days before Pluggy's first row.
+  const hist = h ? h.rows.map(([cyc, d, description, amount], i) => ({ id: `h${i}`, cyc, date: `${d}T12:00:00Z`, amount, description, operationType: "X", category: null, status: "POSTED" })) : [];
+  const firstPluggy = [...histBank].reduce((a, t) => (t.date < a ? t.date : a), "9999").slice(0, 10);
+  const histRefunds = refundMatches(hist);
+  for (const [r, o] of histRefunds) refunds.set(r, o);
   const learned = { ...rules.learned, ...learn([...card, ...bank].map((x) => [x.description, x.category ?? null])) };
   const cat = (src, x) => categorize({ src, op: x.operationType, desc: x.description, pluggy: x.category ?? null }, compiled, learned, entity);
 
   const rows = [];
-  for (const x of card) {
+  for (const x of [...card, ...hist]) {
     const d = x.date.slice(0, 10);
     if (d > today || x.operationType === "PAGAMENTO_FATURA") continue;
+    if (x.cyc && !cycles && d >= firstPluggy) continue;
     if (x.amount > 0) rows.push(row(d, x.amount, cat("card", x), "card", x, cycles));
     else if (refunds.has(x)) {
       const orig = refunds.get(x);
       const c = orig ? cat("card", orig) : /^IOF/i.test(x.description) ? "Tax on financial operations" : cat("card", { ...x, description: refundTarget(x.description), category: null });
       rows.push(row(d, x.amount, c, "card", x, cycles));
     }
+  }
+  if (h) for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i], x = r._x;
+    if (x.cyc) { if (cycles) r.cyc = x.cyc; r.hist = true; }
+    else if (cycles && histBank.has(x) && r.cyc <= h.until) rows.splice(i, 1);
   }
   for (const x of bank) {
     const d = x.date.slice(0, 10);
@@ -101,11 +115,12 @@ export function spendRows(pulled, { rules, compiled, entity, today, cycles = nul
     if (isInternal(x, c)) continue;
     rows.push(row(d, -x.amount, c, "account", x, cycles));
   }
+  for (const r of rows) delete r._x;
   return rows;
 }
 
 function row(d, amt, cat, src, x, cycles) {
-  const r = { d, m: d.slice(0, 7), amt, cat, cluster: clusterOf(cat), src, desc: x.description, pending: x.status === "PENDING" };
+  const r = { d, m: d.slice(0, 7), amt, cat, cluster: clusterOf(cat), src, desc: x.description, pending: x.status === "PENDING", _x: x };
   if (cycles) {
     // A card purchase belongs to the bill the issuer put it on (forecast month − 1 = the cycle's name).
     const f = (x.creditCardMetadata || x.card)?.billForecastDate?.slice(0, 7);
@@ -164,7 +179,16 @@ export function monthView(rows, { today, target = DEFAULT_TARGET, limits = {}, c
     return { id: c.id, label: c.label, limit, spent: s, over: limit !== null && s > limit };
   }).filter((c) => c.limit !== null || c.spent > 0);
   const history = monthRange(addMonths(month, -11), month).map((m) => ({ month: m, spent: sum(clusterMonths[m]) }));
-  return { month, start, end, length, cycle: Boolean(cycles), spent, target, left, over: spent > target, daysLeft, perDay: left > 0 ? left / daysLeft : 0, clusters, history };
+  // With bill history loaded: 24 months, the history-only ones flagged (card only: no account data for them),
+  // and this cycle's card spending against the same cycle a year ago.
+  const key = cycles ? "cyc" : "m";
+  const histMonths = new Set(rows.filter((r) => r.hist).map((r) => r[key]));
+  const cardMonths = byMonth(rows, "cluster", "card", key);
+  const long = histMonths.size ? monthRange(addMonths(month, -23), month).map((m) => histMonths.has(m) ? { month: m, spent: sum(cardMonths[m]), cardOnly: true } : { month: m, spent: sum(clusterMonths[m]) }) : null;
+  const ago = addMonths(month, -12);
+  const card = (m) => rows.filter((r) => r.src === "card" && r[key] === m).reduce((a, r) => a + r.amt, 0);
+  const yearAgo = histMonths.has(ago) || rows.some((r) => r[key] === ago) ? { month: ago, card: card(ago), cardNow: card(month) } : null;
+  return { month, start, end, length, cycle: Boolean(cycles), spent, target, left, over: spent > target, daysLeft, perDay: left > 0 ? left / daysLeft : 0, clusters, history, long, yearAgo };
 }
 
 function addDays(iso, n) {

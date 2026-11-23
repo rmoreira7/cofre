@@ -46,8 +46,10 @@ export function render(el, ctx) {
     ${installmentsCard(installments)}
     <div class="card">
       <div class="label">Últimos meses</div>
-      ${chart(v.history, v.target)}
+      ${chart(v.long || v.history, v.target)}
       <div class="muted">Média ${avgN} meses: ${brl(avg12)} · meta ${brl(v.target)}</div>
+      ${v.long ? '<div class="muted mt6">Barras claras: só o cartão (extratos de fatura), sem as contas. Ficam fora da média.</div>' : ""}
+      ${v.yearAgo ? `<div class="field mt6"><span>Cartão neste ciclo · mesmo ciclo em ${MES[Number(v.yearAgo.month.slice(5)) - 1]}/${v.yearAgo.month.slice(2, 4)}</span><span>${brl(v.yearAgo.cardNow)} · ${brl(v.yearAgo.card)}</span></div>` : ""}
     </div>`;
   el.addEventListener("click", (e) => {
     if (e.target.closest('[data-a="refresh"]')) ctx.refresh();
@@ -99,15 +101,18 @@ function installmentsCard(inst) {
 }
 
 function chart(history, target) {
-  const W = 340, H = 120, max = Math.max(target * 1.2, ...history.map((h) => h.spent)) || 1, bw = W / history.length;
-  const y = (v) => H - 20 - (v / max) * (H - 30);
+  const n = history.length, W = 340, H = 120, max = Math.max(target * 1.2, ...history.map((h) => Math.max(0, h.spent))) || 1, bw = W / n;
+  const y = (v) => H - 20 - (Math.max(0, v) / max) * (H - 30);
+  const w = n > 12 ? bw * 0.7 : bw - 10, pad = (bw - w) / 2;
   let g = "";
   history.forEach((h, i) => {
-    const x = i * bw + 5, top = y(h.spent);
-    g += `<rect x="${x}" y="${top}" width="${bw - 10}" height="${H - 20 - top}" rx="4" fill="var(${h.spent > target ? "--ink-3" : "--brand"})" opacity="${i === history.length - 1 ? 1 : 0.55}"/>
-      <text x="${x + (bw - 10) / 2}" y="${H - 5}" text-anchor="middle" font-size="10" fill="var(--ink-3)">${MES[Number(h.month.slice(5)) - 1]}</text>`;
+    const x = i * bw + pad, top = y(h.spent);
+    const label = n <= 12 || (n - 1 - i) % 3 === 0;
+    const mes = MES[Number(h.month.slice(5)) - 1];
+    g += `<rect x="${x}" y="${top}" width="${w}" height="${H - 20 - top}" rx="${n > 12 ? 2 : 4}" fill="var(${h.spent > target ? "--ink-3" : "--brand"})" opacity="${i === n - 1 ? 1 : h.cardOnly ? 0.25 : 0.55}"><title>${mes}/${h.month.slice(2, 4)} · ${brl(h.spent)}${h.cardOnly ? " · só cartão" : ""}</title></rect>
+      ${label ? `<text x="${x + w / 2}" y="${H - 5}" text-anchor="middle" font-size="10" fill="var(--ink-3)">${n > 12 && h.month.endsWith("-01") ? h.month.slice(2, 4) : mes}</text>` : ""}`;
   });
   g += `<line x1="0" x2="${W}" y1="${y(target)}" y2="${y(target)}" stroke="var(--brand)" stroke-dasharray="4 4"/><text x="${W}" y="${y(target) - 4}" text-anchor="end" font-size="10" fill="var(--brand)">meta ${target >= 1000 ? (target / 1000).toLocaleString("pt-BR") + "k" : target}</text>`;
-  return `<svg viewBox="0 0 ${W} ${H}" class="mt10" role="img" aria-label="Gasto por mês, últimos 12 meses">${g}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" class="mt10" role="img" aria-label="Gasto por mês, últimos ${n} meses">${g}</svg>`;
 }
 
