@@ -191,6 +191,15 @@ export function mergeLadders(own, joints = []) {
   };
 }
 
+// Início's next-30-days list: bills going out, maturities (own and joint), and the forecast salary coming in.
+export function timeline({ cards = [], mat, salary = [], today, days = 30 }) {
+  const out = [];
+  for (const c of cards) if (c.due && c.bill > 0 && daysBetween(today, c.due) >= 0 && daysBetween(today, c.due) <= days) out.push({ date: c.due, kind: "bill", name: `Fatura ${c.name}`, amount: -c.bill, early: c.early || 0 });
+  for (const r of mat.rows) if (r.days >= 0 && r.days <= days) out.push({ date: r.due, kind: "maturity", name: `${r.issuer}${r.n > 1 ? ` ×${r.n}` : ""} vence`, bank: r.bank, joint: Boolean(r.joint), rates: r.rates, amount: r.balance, brb: r.tag === "brb" });
+  for (const f of salary) out.push({ date: f.date, kind: "salary", from: f.from, amount: f.amount, forecast: true });
+  return out.sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind));
+}
+
 export function alerts({ mine, joint, mat, cards, today }, { idleCash = 5000, cdbMin = 110, soonDays = 30, billDays = 5 } = {}) {
   const out = [];
   const idle = (h, scope) => h.banks.filter((b) => b.checking > idleCash).forEach((b) => out.push({ kind: "idle", scope, bank: b.name, amount: b.checking }));

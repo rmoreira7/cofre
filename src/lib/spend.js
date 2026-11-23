@@ -167,6 +167,30 @@ export function leftover(income, spend, months, key = "m") {
   return months.map(per);
 }
 
+// Salary still to come in the next `days`: each pay slot (paid up to the 15th / after the 15th) seen in ≥ 3 of the
+// last 6 months gives its median day and the median of its last 3 amounts. A month that already got that slot's
+// payment is skipped. Output rows are forecasts, not data.
+export function salaryForecast(income, { today, days = 30 }) {
+  const sal = income.filter((r) => r.kind === "salary" && r.d <= today && r.d >= addDays(today, -183)).sort((a, b) => a.d.localeCompare(b.d));
+  const slotOf = (d) => (Number(d.slice(8, 10)) <= 15 ? 0 : 1);
+  const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2; };
+  const end = addDays(today, days), out = [];
+  for (const slot of [0, 1]) {
+    const rows = sal.filter((r) => slotOf(r.d) === slot);
+    if (new Set(rows.map((r) => r.m)).size < 3) continue;
+    const day = Math.round(median(rows.map((r) => Number(r.d.slice(8, 10)))));
+    const amount = median(rows.slice(-3).map((r) => r.amt));
+    const from = rows.at(-1).from;
+    for (const m of [today.slice(0, 7), addMonths(today.slice(0, 7), 1), addMonths(today.slice(0, 7), 2)]) {
+      const [y, mo] = m.split("-").map(Number);
+      const date = `${m}-${String(Math.min(day, new Date(Date.UTC(y, mo, 0)).getUTCDate())).padStart(2, "0")}`;
+      if (date < today || date > end || income.some((r) => r.kind === "salary" && r.m === m && slotOf(r.d) === slot)) continue;
+      out.push({ date, amount, from });
+    }
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+
 function row(d, amt, cat, src, x, cycles) {
   const r = { d, m: d.slice(0, 7), amt, cat, cluster: clusterOf(cat), src, desc: x.description, pending: x.status === "PENDING", _x: x };
   if (cycles) {

@@ -153,3 +153,16 @@ test("Wise: balance-only (transactions dropped), foreign balances in BRL at the 
   assert.deepEqual(h.banks[0].foreign, [{ currency: "USD", amount: 100, brl: 590 }]);
   assert.equal(toBRL(10, "EUR", { USD: 5 }), 0);
 });
+
+test("timeline: bills, maturities and forecast salary in the next 30 days, by date", async () => {
+  const { timeline } = await import("../src/lib/model.js");
+  const t = timeline({
+    today: "2026-11-23",
+    cards: [{ name: "Nu", due: "2026-12-03", bill: 100, early: 20 }, { name: "Zero", due: "2026-12-01", bill: 0 }, { name: "Far", due: "2027-01-10", bill: 5 }],
+    mat: { rows: [{ due: "2026-12-08", days: 15, issuer: "Acme", n: 1, bank: "xp", rates: ["120% CDI"], balance: 2000 }, { due: "2027-02-10", days: 79, issuer: "Late", n: 1, bank: "itau", balance: 1, joint: true }] },
+    salary: [{ date: "2026-12-05", amount: 7000, from: "237" }],
+  });
+  assert.deepEqual(t.map((e) => [e.date, e.kind, e.amount]), [["2026-12-03", "bill", -100], ["2026-12-05", "salary", 7000], ["2026-12-08", "maturity", 2000]]);
+  assert.equal(t[0].early, 20);
+  assert.equal(t[1].forecast, true);
+});

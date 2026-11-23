@@ -132,3 +132,18 @@ button.bar.tap{display:block;width:100%;border:0;background:none;color:inherit;f
 .buy select{max-width:150px;font:12px/1.2 inherit;font-family:inherit;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:4px 6px}
 .sm-pad{padding:6px 0 4px;font-size:12px}
 .lock .btn{max-width:240px;margin-top:8px}
+/* Início v2 */
+.tap-card{cursor:pointer}
+.row.end{align-items:flex-end}.right{text-align:right}.strong{font-weight:700}.xs{font-size:11.5px;margin-top:4px}
+.goal-track{position:relative;overflow:visible}.goal-track .goal{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);border-radius:1px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.stat{background:var(--surface-2);border-radius:12px;padding:9px 10px;display:flex;flex-direction:column}
+.stat b{font-size:16px;margin:1px 0}
+.spark{display:flex;align-items:center;gap:3px;height:30px;margin-top:8px}.spark i{flex:1;border-radius:2px;min-height:2px}
+.tl>div{display:grid;grid-template-columns:40px 10px 1fr auto;gap:8px;align-items:center;padding:7px 0}
+.tl .d{font-size:12px;color:var(--ink-3);text-align:right;line-height:1.1}.tl .d b{display:block;color:var(--ink);font-size:15px}
+.tl .dot{width:10px;height:10px;border-radius:50%}
+.tl .t{display:flex;flex-direction:column;font-size:14px;min-width:0}.tl .t small{color:var(--ink-3);font-size:12px}
+.tl .fore{opacity:.78}.tl .fore .t{font-style:italic}
+.joint-toggle{width:100%;background:none;border:0;font:inherit;color:inherit;text-align:left;cursor:pointer;padding:0}
+.joint-card .joint-more{display:none}.joint-card.open .joint-more{display:block}.joint-card.open .caret{transform:rotate(90deg)}

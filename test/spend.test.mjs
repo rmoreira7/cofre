@@ -133,3 +133,18 @@ test("income: salary = same-person transfer from an unconnected bank; leftover p
   const [m] = leftover(inc, [{ m: "2026-11", amt: 5000 }, { m: "2026-11", amt: 99, hist: true }], ["2026-11"]);
   assert.deepEqual(m, { month: "2026-11", salary: 7000, other: 122, oneOff: 0, income: 7122, spent: 5000, left: 2122, regular: 2122 });
 });
+
+test("salaryForecast: median day and amount per pay slot, skipping months already paid", async () => {
+  const { salaryForecast } = await import("../src/lib/spend.js");
+  const s = (d, amt) => ({ d, m: d.slice(0, 7), amt, kind: "salary", from: "237" });
+  const income = [
+    s("2026-08-05", 7000), s("2026-08-20", 4700), s("2026-09-05", 7200), s("2026-09-21", 4720),
+    s("2026-10-06", 7277), s("2026-10-20", 4723), s("2026-11-05", 7278), s("2026-11-19", 4723),
+    { d: "2026-11-10", m: "2026-11", amt: 50, kind: "other" },
+  ];
+  assert.deepEqual(salaryForecast(income, { today: "2026-11-23" }), [
+    { date: "2026-12-05", amount: 7277, from: "237" },
+    { date: "2026-12-20", amount: 4723, from: "237" },
+  ]);
+  assert.deepEqual(salaryForecast(income.slice(0, 2), { today: "2026-11-23" }), []);
+});
