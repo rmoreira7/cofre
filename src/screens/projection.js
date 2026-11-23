@@ -1,5 +1,6 @@
-import { brl, mil } from "../lib/format.js";
-import { project, validParams, assumptions } from "../lib/projection.js";
+import { brl, mil, pct, ddmm } from "../lib/format.js";
+import { project, validParams, assumptions, reality, salaryAt } from "../lib/projection.js";
+import { bankName } from "../lib/model.js";
 import { header, needsSetup } from "./home.js";
 
 const MIN = 5000;
@@ -24,6 +25,8 @@ export function render(el, ctx) {
 
   el.innerHTML = `${header(ctx, "Projeção")}
     <div class="sub mb10">Patrimônio ${v.mine.banks.map((b) => b.name).join(" + ")}</div>
+    ${realityCard(ctx, v, p, target)}
+    ${assumptionsCard(v, p, target)}
     <div class="card">
       <div class="label">Se eu gastar por mês</div>
       <div class="kpi" data-o="spend"></div>
@@ -66,4 +69,61 @@ export function render(el, ctx) {
   el.querySelector('[data-i="spend"]').addEventListener("input", (e) => { chosen = Number(e.target.value); paint(); });
   el.addEventListener("click", (e) => { if (e.target.closest('[data-a="refresh"]')) ctx.refresh(); });
   paint();
+}
+
+// Real × projetado: the plan (target spending) from the projection's start date against what happened, same banks.
+function realityCard(ctx, v, p, target) {
+  const byDay = new Map();
+  for (const w of ctx.data.rules?.wealth || []) byDay.set(w.d, w);
+  for (const w of ctx.data.wealthLog || []) byDay.set(w.d, w);
+  const r = reality(p, [...byDay.values()], { spend: target, from: p.from, today: v.today });
+  if (!r || r.actual.length < 2) return `<div class="card"><div class="label">Real × projetado</div><div class="muted mt6">Começa a comparar a partir da próxima atualização.</div></div>`;
+  const W = 340, H = 150, m = { l: 6, r: 6, t: 12, b: 22 };
+  const endD = r.knots.find((k) => k.d >= v.today && k.d > r.today.d)?.d || r.knots.at(-1).d;
+  const ks = r.knots.filter((k) => k.d <= endD);
+  const ms = (d) => Date.parse(d + "T12:00:00Z");
+  const vals = [...ks.map((k) => k.v), ...r.actual.map((a) => a.real)];
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const x = (d) => m.l + ((ms(d) - ms(r.from)) / (ms(endD) - ms(r.from) || 1)) * (W - m.l - m.r);
+  const y = (val) => m.t + (1 - (val - lo) / (hi - lo || 1)) * (H - m.t - m.b);
+  const proj = ks.map((k) => `${x(k.d)},${y(k.v)}`).join(" ");
+  const real = r.actual.map((a) => `${x(a.d)},${y(a.real)}`).join(" ");
+  const g = r.gap;
+  return `<div class="card">
+      <div class="row"><div class="label">Real × projetado</div><span class="muted sm">desde ${ddmm(r.from)}</span></div>
+      <div class="split">
+        <div class="tile"><span class="muted">Real hoje</span><b>${mil(r.today.real)}</b><span class="muted sm">${brl(r.today.real - r.start)} desde ${ddmm(r.from)}</span></div>
+        <div class="tile"><span class="muted">Projetado</span><b>${mil(r.today.projected)}</b><span class="muted sm">no plano (gasto ${brl(target)})</span></div>
+      </div>
+      <div class="mt8 ${g >= 0 ? "ok" : "bad"} strong">${g >= 0 ? "À frente" : "Atrás"} do plano em ${brl(Math.abs(g))}</div>
+      <svg viewBox="0 0 ${W} ${H}" class="mt8" role="img" aria-label="Patrimônio real e projetado">
+        <polyline points="${proj}" fill="none" stroke="var(--ink-3)" stroke-width="2" stroke-dasharray="5 5"/>
+        <polyline points="${real}" fill="none" stroke="var(--brand)" stroke-width="3" stroke-linejoin="round"/>
+        ${r.actual.map((a) => `<circle cx="${x(a.d)}" cy="${y(a.real)}" r="3.5" fill="var(--brand)"><title>${ddmm(a.d)} · real ${brl(a.real)} · projetado ${brl(a.projected)}</title></circle>`).join("")}
+        <text x="${m.l}" y="${H - 6}" font-size="10.5" fill="var(--ink-3)">${ddmm(r.from)}</text>
+        <text x="${W - m.r}" y="${H - 6}" text-anchor="end" font-size="10.5" fill="var(--ink-3)">${ddmm(endD)}</text>
+      </svg>
+      <div class="muted sm">Linha cheia: real · tracejada: projeção. Mesmos bancos de ${ddmm(r.from)} (${r.banks.map(bankName).join(" + ")})${r.extra.length ? `; ${r.extra.map(bankName).join(" e ")} ${r.extra.length > 1 ? "entraram depois e ficam" : "entrou depois e fica"} fora da comparação` : ""}. O mês em curso só ganha rendimento na projeção; entradas e gastos dele contam a partir do fechamento.</div>
+    </div>`;
+}
+
+// Premissas × realidade: what the projection assumes against what the data shows.
+function assumptionsCard(v, p, target) {
+  const sal = salaryAt(p, v.today.slice(0, 7));
+  const realSal = v.left?.n ? v.left.avg.salary : null;
+  const inv = v.mine.banks.filter((b) => b.cdiAvg);
+  const w = inv.reduce((a, b) => a + b.invested, 0);
+  const realCdi = w ? inv.reduce((a, b) => a + b.cdiAvg * b.invested, 0) / w : null;
+  const line = (name, assumed, real, fmt, good) => {
+    const ok = real == null ? null : good(real, assumed);
+    return `<div><span class="l">${name}<small>premissa ${fmt(assumed)}</small></span><b class="${ok == null ? "" : ok ? "ok" : "bad"}">${real == null ? "—" : fmt(real)}</b></div>`;
+  };
+  return `<div class="card"><div class="row"><div class="label">Premissas × realidade</div><span class="muted sm">realidade</span></div>
+    <div class="list mt6">
+      ${line("Salário líquido / mês", sal, realSal, (n) => brl(n), (r, a) => r >= a * 0.97)}
+      ${line(`Gasto / mês <span class="muted sm">(média ${v.avgN} meses)</span>`, target, v.avg12, (n) => brl(n), (r, a) => r <= a * 1.03)}
+      ${line("Rendimento (% do CDI)", p.cdi_pct, realCdi, (n) => pct(n, 0), (r, a) => r >= a - 1)}
+    </div>
+    ${v.avg12 > target * 1.03 ? `<div class="muted sm mt6">No ritmo real de gastos (${brl(v.avg12)}), arraste o controle abaixo até "hoje" para ver onde isso leva.</div>` : ""}
+  </div>`;
 }

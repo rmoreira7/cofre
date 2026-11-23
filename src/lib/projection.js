@@ -57,3 +57,36 @@ export function assumptions(p) {
   return `Salário líquido R$ ${fmt(sal.net / 1000)} mil a partir de ${month}/${sy.slice(2)}${invested}`
     + ` · ~${fmt(p.cdi_pct)}% CDI (${years.map((y) => `${fmt(p.cdi[y])}% em ${y}`).join(", ")}) · IR ${fmt(p.ir)}%`;
 }
+
+// Projection against reality. series: [{ d, banks: { label: BRL } }] (laptop pulls + the app's refreshes).
+// The projection starts at `from` (default: the first point) with that day's total, and every later point is compared
+// on the same banks only, so a bank connected later (Wise) never reads as a gain. Projected values between month ends
+// are interpolated by day; the start month only earns yield, as in project().
+export function reality(p, series, { spend, from, today, untilYear }) {
+  const pts = [...series].sort((a, b) => a.d.localeCompare(b.d)).filter((w) => w.d <= today);
+  const base = pts.find((w) => !from || w.d >= from);
+  if (!base) return null;
+  const banks = Object.keys(base.banks);
+  const total = (w) => banks.reduce((a, k) => a + (w.banks[k] || 0), 0);
+  const start = total(base);
+  const end = untilYear ?? Number(today.slice(0, 4)) + 1;
+  const { path } = project(p, { start, today: base.d, spend, untilYear: end });
+  const [y, m] = base.d.split("-").map(Number);
+  const dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const firstEnd = `${base.d.slice(0, 7)}-${String(dim).padStart(2, "0")}`;
+  const knots = [{ d: base.d, v: start }, { d: firstEnd, v: start * (1 + monthlyYield(p, y) * ((dim - Number(base.d.slice(8))) / dim)) }];
+  for (const q of path) {
+    const [yy, mm] = q.month.split("-").map(Number);
+    knots.push({ d: `${q.month}-${String(new Date(Date.UTC(yy, mm, 0)).getUTCDate()).padStart(2, "0")}`, v: q.worth });
+  }
+  const ms = (d) => Date.parse(d + "T12:00:00Z");
+  const at = (d) => {
+    const i = knots.findIndex((k) => k.d >= d);
+    if (i <= 0) return i === 0 ? knots[0].v : knots.at(-1).v;
+    const a = knots[i - 1], b = knots[i];
+    return a.v + ((b.v - a.v) * (ms(d) - ms(a.d))) / (ms(b.d) - ms(a.d));
+  };
+  const actual = pts.filter((w) => w.d >= base.d).map((w) => ({ d: w.d, real: total(w), projected: at(w.d) }));
+  const last = actual.at(-1);
+  return { from: base.d, banks, start, knots, actual, today: last, gap: last.real - last.projected, extra: Object.keys(pts.at(-1).banks).filter((k) => !banks.includes(k)) };
+}

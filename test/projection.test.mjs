@@ -36,3 +36,24 @@ test("validParams and assumptions", () => {
   assert.ok(!validParams({ salary: [] }));
   assert.match(assumptions(p), /R\$ 2 mil a partir de jan\/31 · 13º e férias investidos · ~100% CDI \(10% em 2030, 12% em 2031\) · IR 20%/);
 });
+
+test("reality: projection from the start date vs actual, same banks only; interpolated between month ends", async () => {
+  const { reality } = await import("../src/lib/projection.js");
+  const p = { salary: [{ from: "2026-01", net: 10000 }], cdi: { 2026: 12, 2027: 12 }, cdi_pct: 100, ir: 0 };
+  const series = [
+    { d: "2026-11-10", banks: { a: 900 } },
+    { d: "2026-11-16", banks: { a: 1000, b: 100 } },
+    { d: "2026-11-23", banks: { a: 1010, b: 100, w: 500 } },
+    { d: "2026-12-31", banks: { a: 9000, b: 100 } },
+  ];
+  const r = reality(p, series, { spend: 5000, from: "2026-11-15", today: "2026-11-23" });
+  assert.equal(r.from, "2026-11-16");
+  assert.deepEqual(r.banks, ["a", "b"]);
+  assert.equal(r.start, 1100);
+  assert.equal(r.today.real, 1110);
+  assert.deepEqual(r.extra, ["w"]);
+  assert.ok(r.today.projected > 1100 && r.today.projected < 1110);
+  assert.equal(r.actual.length, 2);
+  const dec = r.knots.find((k) => k.d === "2026-12-31");
+  assert.ok(Math.abs(dec.v - (r.knots[1].v * (1 + ((1.12) ** (1 / 12) - 1)) + 10000 - 5000)) < 1e-6);
+});

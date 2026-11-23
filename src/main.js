@@ -11,7 +11,7 @@ import * as maturities from "./screens/maturities.js";
 import * as projection from "./screens/projection.js";
 import * as settings from "./screens/settings.js";
 
-export const APP_VERSION = "0.9.0";
+export const APP_VERSION = "0.10.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, maturities, projection, settings };
 
@@ -135,7 +135,12 @@ async function refresh() {
     next.fx = await rates(next, prev?.fx);
     // A failed bank keeps its previous data instead of disappearing from the totals.
     next.items = next.items.map((it) => (it.error && prev?.items.find((o) => o.label === it.label && !o.error)) ? { ...prev.items.find((o) => o.label === it.label && !o.error), stale: true } : it);
-    await ctx.save({ ...state.data, snapshot: next });
+    // One wealth point per day (the last refresh of the day wins), per bank, for Projeção's reality check.
+    const me = primaryEntity(state.data.rules);
+    const h = me ? holdings(next, state.data.rules, me) : null;
+    const log = (state.data.wealthLog || []).filter((w) => w.d !== localToday());
+    if (h) log.push({ d: localToday(), banks: Object.fromEntries(h.banks.map((b) => [b.label, Math.round(b.total * 100) / 100])) });
+    await ctx.save({ ...state.data, snapshot: next, wealthLog: log });
     state.busy = false;
     say(failed.length ? `Falhou: ${failed.map((f) => bankName(f.label)).join(", ")} (mantidos os dados anteriores)` : "");
   } catch (e) {
