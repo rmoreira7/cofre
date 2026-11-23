@@ -30,7 +30,48 @@ export function isInternal(x, cat) {
 }
 
 // pulled: pluggy.pullAll() output (or a snapshot of the same shape). Returns one entity's spend rows.
-export function spendRows(pulled, { rules, compiled, entity, today }) {
+// Card cycles: closing dates of the entity's main card, plus an estimate for the open one (last + 1 month).
+// A spending "month" then runs from one closing to the next and is named after the month most of it covers.
+export function cardCycles(pulled, { rules, entity }) {
+  let best = null;
+  for (const it of pulled.items) {
+    if (it.error || entityOf(it.label, rules) !== entity) continue;
+    for (const a of it.accounts) {
+      if (a.type !== "CREDIT") continue;
+      const closes = (a.bills || []).map((b) => (b.billClosingDate || "").slice(0, 10)).filter(Boolean).sort();
+      if (closes.length && (!best || a.transactions.length > best.n)) best = { closes, n: a.transactions.length };
+    }
+  }
+  if (!best) return null;
+  const last = best.closes.at(-1);
+  const closes = [...best.closes];
+  for (let i = 1; i <= 2; i++) closes.push(addMonthsDate(last, i));
+  return { closes };
+}
+
+function addMonthsDate(iso, n) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const t = y * 12 + (m - 1) + n;
+  const ny = Math.floor(t / 12), nm = (t % 12) + 1;
+  const last = new Date(Date.UTC(ny, nm, 0)).getUTCDate();
+  return `${ny}-${String(nm).padStart(2, "0")}-${String(Math.min(d, last)).padStart(2, "0")}`;
+}
+
+// The cycle a date belongs to: the first closing after it, named by that closing's month.
+export function cycleOf(date, cycles) {
+  const c = cycles.closes.find((x) => date < x);
+  return c ? c.slice(0, 7) : date.slice(0, 7);
+}
+
+export function cycleBounds(label, cycles) {
+  const i = cycles.closes.findIndex((x) => x.slice(0, 7) === label);
+  if (i < 0) return null;
+  const end = addMonthsDate(cycles.closes[i], 0);
+  const start = i > 0 ? cycles.closes[i - 1] : addMonthsDate(end, -1);
+  return { start, end };
+}
+
+export function spendRows(pulled, { rules, compiled, entity, today, cycles = null }) {
   const items = pulled.items.filter((it) => !it.error && entityOf(it.label, rules) === entity);
   const card = [], bank = [];
   for (const it of items) for (const a of it.accounts) (a.type === "CREDIT" ? card : bank).push(...(a.type === "CREDIT" ? cleanCard(a.transactions) : a.transactions));
@@ -41,28 +82,34 @@ export function spendRows(pulled, { rules, compiled, entity, today }) {
   for (const x of card) {
     const d = x.date.slice(0, 10);
     if (d > today || x.operationType === "PAGAMENTO_FATURA" || !(x.amount > 0)) continue;
-    rows.push(row(d, x.amount, cat("card", x), "card", x));
+    rows.push(row(d, x.amount, cat("card", x), "card", x, cycles));
   }
   for (const x of bank) {
     const d = x.date.slice(0, 10);
     if (x.amount >= 0 || d > today) continue;
     const c = cat("bank", x);
     if (isInternal(x, c)) continue;
-    rows.push(row(d, -x.amount, c, "account", x));
+    rows.push(row(d, -x.amount, c, "account", x, cycles));
   }
   return rows;
 }
 
-function row(d, amt, cat, src, x) {
-  return { d, m: d.slice(0, 7), amt, cat, cluster: clusterOf(cat), src, desc: x.description, pending: x.status === "PENDING" };
+function row(d, amt, cat, src, x, cycles) {
+  const r = { d, m: d.slice(0, 7), amt, cat, cluster: clusterOf(cat), src, desc: x.description, pending: x.status === "PENDING" };
+  if (cycles) {
+    // A card purchase belongs to the bill the issuer put it on (forecast month − 1 = the cycle's name).
+    const f = (x.creditCardMetadata || x.card)?.billForecastDate?.slice(0, 7);
+    r.cyc = src === "card" && f ? addMonths(f, -1) : cycleOf(d, cycles);
+  }
+  return r;
 }
 
 // { "YYYY-MM": { [key]: total } }, key = category (by = "cat") or cluster id (by = "cluster")
-export function byMonth(rows, by = "cat", src = null) {
+export function byMonth(rows, by = "cat", src = null, key = "m") {
   const out = {};
   for (const r of rows) {
     if (src && r.src !== src) continue;
-    const m = (out[r.m] ||= {});
+    const m = (out[r[key] ?? r.m] ||= {});
     m[r[by]] = (m[r[by]] || 0) + r.amt;
   }
   return out;
@@ -88,14 +135,18 @@ function addMonths(ym, n) {
 }
 
 // The Gastos screen: this month against the target, per cluster, plus the last 12 months.
-export function monthView(rows, { today, target = DEFAULT_TARGET, limits = {} }) {
-  const month = today.slice(0, 7);
-  const clusterMonths = byMonth(rows, "cluster");
+export function monthView(rows, { today, target = DEFAULT_TARGET, limits = {}, cycles = null }) {
+  const month = cycles ? cycleOf(today, cycles) : today.slice(0, 7);
+  const clusterMonths = byMonth(rows, "cluster", null, cycles ? "cyc" : "m");
   const now = clusterMonths[month] || {};
   const spent = sum(now);
   const [y, mo, day] = today.split("-").map(Number);
-  const daysInMonth = new Date(Date.UTC(y, mo, 0)).getUTCDate();
-  const daysLeft = daysInMonth - day + 1;
+  const bounds = cycles ? cycleBounds(month, cycles) : null;
+  const end = bounds ? addDays(bounds.end, -1) : `${month}-${String(new Date(Date.UTC(y, mo, 0)).getUTCDate()).padStart(2, "0")}`;
+  const start = bounds ? bounds.start : `${month}-01`;
+  const daysLeft = Math.round((Date.parse(end + "T12:00:00Z") - Date.parse(today + "T12:00:00Z")) / 864e5) + 1;
+  const length = Math.round((Date.parse(end + "T12:00:00Z") - Date.parse(start + "T12:00:00Z")) / 864e5) + 1;
+  void day;
   const left = target - spent;
   const clusters = CLUSTERS.map((c) => {
     const limit = c.id in limits ? limits[c.id] : c.limit;
@@ -103,5 +154,9 @@ export function monthView(rows, { today, target = DEFAULT_TARGET, limits = {} })
     return { id: c.id, label: c.label, limit, spent: s, over: limit !== null && s > limit };
   }).filter((c) => c.limit !== null || c.spent > 0);
   const history = monthRange(addMonths(month, -11), month).map((m) => ({ month: m, spent: sum(clusterMonths[m]) }));
-  return { month, spent, target, left, over: spent > target, daysLeft, perDay: left > 0 ? left / daysLeft : 0, clusters, history };
+  return { month, start, end, length, cycle: Boolean(cycles), spent, target, left, over: spent > target, daysLeft, perDay: left > 0 ? left / daysLeft : 0, clusters, history };
+}
+
+function addDays(iso, n) {
+  return new Date(Date.parse(iso + "T12:00:00Z") + n * 864e5).toISOString().slice(0, 10);
 }

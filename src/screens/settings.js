@@ -63,6 +63,7 @@ export function render(el, ctx) {
       <div class="label">Metas</div>
       <form data-f="goals">
         <label class="in row"><span>Gasto mensal (R$)</span><input name="target" type="number" inputmode="numeric" min="0" step="100" value="${s.target ?? DEFAULT_TARGET}"></label>
+        <label class="in row"><span>Mês de gastos</span><select name="monthMode"><option value="cycle" ${s.monthMode !== "calendar" ? "selected" : ""}>ciclo do cartão</option><option value="calendar" ${s.monthMode === "calendar" ? "selected" : ""}>mês civil</option></select></label>
         <label class="in row"><span>CDI (% a.a.)</span><input name="cdi" type="number" inputmode="decimal" min="0" step="0.05" value="${s.cdi ?? 13.65}"></label>
         <label class="in row"><span>CDB mínimo (% CDI)</span><input name="cdbMin" type="number" inputmode="numeric" min="0" step="1" value="${s.cdbMin ?? 110}"></label>
         <details><summary>Limites por grupo <span class="muted">${CLUSTERS.filter((c) => c.limit !== null).length} grupos</span></summary>
@@ -93,7 +94,7 @@ export function render(el, ctx) {
     e.preventDefault();
     const f = goals.elements;
     const limits = Object.fromEntries(CLUSTERS.filter((c) => c.limit !== null).map((c) => [c.id, Math.max(0, Number(f[`l_${c.id}`].value) || 0)]));
-    await ctx.save({ ...ctx.data, settings: { ...s, target: Math.max(0, Number(f.target.value) || 0), cdi: Number(f.cdi.value) || 13.65, cdbMin: Number(f.cdbMin.value) || 110, limits } });
+    await ctx.save({ ...ctx.data, settings: { ...s, monthMode: f.monthMode.value, target: Math.max(0, Number(f.target.value) || 0), cdi: Number(f.cdi.value) || 13.65, cdbMin: Number(f.cdbMin.value) || 110, limits } });
     ctx.go("settings");
   });
 

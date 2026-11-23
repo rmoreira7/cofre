@@ -33,7 +33,7 @@ export function slim(pulled) {
             (r.availableAmounts || []).filter((x) => x.amount).map((x) => ({ name: r.name, amount: x.amount, pct: x.remuneration?.postFixedIndexerPercentage ?? null })),
           ),
           credit: a.type === "CREDIT" ? pick(a.creditData || {}, ["creditLimit", "availableCreditLimit", "balanceDueDate", "balanceCloseDate"]) : undefined,
-          bills: a.bills?.map((b) => pick(b, ["dueDate", "totalAmount"])),
+          bills: a.bills?.map((b) => pick(b, ["dueDate", "totalAmount", "billClosingDate"])),
           transactions: (a.type === "CREDIT" ? cleanCard(a.transactions) : a.transactions).map((t) => {
             const out = pick(t, TX);
             const m = t.creditCardMetadata;

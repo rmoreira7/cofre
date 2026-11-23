@@ -5,17 +5,15 @@ const COLOR = { travel: "--c-travel", food: "--c-food", shop: "--c-shop", serv: 
 
 export function render(el, ctx) {
   if (needsSetup(el, ctx, "Gastos")) return;
-  const { month: v, avg12, avgN, today } = ctx.view();
+  const { month: v, avg12, avgN } = ctx.view();
   const C = 2 * Math.PI * 56;
   const share = Math.min(1, v.spent / v.target);
-  const [y, m] = v.month.split("-").map(Number);
-  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const elapsed = (Number(today.slice(8, 10)) - 1 + 0.5) / lastDay;
+  const m = Number(v.month.slice(5, 7));
+  const elapsed = (v.length - v.daysLeft + 0.5) / v.length;
   const pace = v.over ? ["bad", "acima da meta"] : v.spent / v.target > elapsed + 0.05 ? ["warn", "acima do ritmo"] : ["", "no ritmo da meta"];
-  const endDate = `${v.month}-${String(lastDay).padStart(2, "0")}`;
 
   el.innerHTML = `${header(ctx, "Gastos")}
-    <div class="sub mb10">${MESES[m - 1]} · ${v.daysLeft} ${v.daysLeft === 1 ? "dia restante" : "dias restantes"}</div>
+    <div class="sub mb10">${MESES[m - 1]}${v.cycle ? ` · ciclo ${ddmm(v.start)}–${ddmm(v.end)}` : ""} · ${v.daysLeft} ${v.daysLeft === 1 ? "dia restante" : "dias restantes"}</div>
     <div class="card">
       <div class="row">
         <div class="ring"><svg viewBox="0 0 132 132"><circle cx="66" cy="66" r="56" fill="none" stroke="var(--surface-2)" stroke-width="12"/>
@@ -23,7 +21,7 @@ export function render(el, ctx) {
           <div class="c"><b>${brl(v.spent)}</b><span class="muted">de ${brl(v.target)}</span></div></div>
         <div class="grow">
           <div class="label">Pode gastar por dia</div><div class="kpi${v.over ? " bad" : ""}">${brl(v.perDay)}</div>
-          <div class="muted mt6">${v.left >= 0 ? `Restam <b class="ink">${brl(v.left)}</b> até ${ddmm(endDate)}` : `Passou <b class="bad">${brl(-v.left)}</b> da meta`}</div>
+          <div class="muted mt6">${v.left >= 0 ? `Restam <b class="ink">${brl(v.left)}</b> até ${ddmm(v.end)}` : `Passou <b class="bad">${brl(-v.left)}</b> da meta`}</div>
           <span class="chip ${pace[0]} mt10">${pace[1]}</span>
         </div>
       </div>

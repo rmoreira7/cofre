@@ -103,7 +103,8 @@ html,body{min-height:100%}
 .in{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink-2);font-weight:600;margin:10px 0}
 .in.row{flex-direction:row;align-items:center;justify-content:space-between;margin:6px 0}
 .in input,.in textarea{font:15px/1.4 inherit;font-family:inherit;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px;width:100%}
-.in.row input{width:120px;text-align:right}
+.in.row input,.in.row select{width:150px;text-align:right}
+.in select{font:15px/1.4 inherit;font-family:inherit;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px}
 .in textarea{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;resize:vertical}
 details{margin:8px 0}
 summary{cursor:pointer;padding:10px 0;font-size:14.5px;display:flex;justify-content:space-between;list-style:none}

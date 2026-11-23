@@ -1,7 +1,7 @@
 import { createVault, idbStorage, validPin } from "./lib/vault.js";
 import { createPluggy } from "./lib/pluggy.js";
 import { compileRules } from "./lib/categorize.js";
-import { spendRows, monthView, byMonth, sum, monthRange, DEFAULT_TARGET } from "./lib/spend.js";
+import { spendRows, monthView, byMonth, sum, monthRange, cardCycles, DEFAULT_TARGET } from "./lib/spend.js";
 import { slim, holdings, cards, maturities as maturityLadder, primaryEntity, bankName } from "./lib/model.js";
 import { localToday, daysBetween, ddmmyyyy } from "./lib/format.js";
 import * as home from "./screens/home.js";
@@ -10,7 +10,7 @@ import * as maturities from "./screens/maturities.js";
 import * as projection from "./screens/projection.js";
 import * as settings from "./screens/settings.js";
 
-export const APP_VERSION = "0.3.0";
+export const APP_VERSION = "0.3.1";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, maturities, projection, settings };
 
@@ -38,10 +38,11 @@ export function buildView(data, today) {
   const snap = data.snapshot;
   const s = data.settings || {};
   const me = primaryEntity(rules);
-  const rows = spendRows(snap, { rules, compiled, entity: me, today });
+  const cycles = s.monthMode === "calendar" ? null : cardCycles(snap, { rules, entity: me });
+  const rows = spendRows(snap, { rules, compiled, entity: me, today, cycles });
   const mine = holdings(snap, rules, me);
-  const month = monthView(rows, { today, target: s.target ?? DEFAULT_TARGET, limits: s.limits || {} });
-  const m = byMonth(rows, "cluster");
+  const month = monthView(rows, { today, target: s.target ?? DEFAULT_TARGET, limits: s.limits || {}, cycles });
+  const m = byMonth(rows, "cluster", null, cycles ? "cyc" : "m");
   const last12 = monthRange(month.history[0].month, month.history.at(-2).month);
   const last3 = last12.slice(-3);
   const avg3 = last3.reduce((a, k) => a + sum(m[k]), 0) / (last3.length || 1);

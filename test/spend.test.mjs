@@ -55,3 +55,28 @@ test("helpers", () => {
   assert.equal(CLUSTERS.reduce((a, c) => a + (c.limit || 0), 0), 7000);
   assert.equal(isInternal({ operationType: "X", description: "COMPRA CDB BANCO" }, "Shopping"), true);
 });
+
+test("card cycles: card rows follow their bill, account rows follow the closing dates", async () => {
+  const { cardCycles, cycleOf, cycleBounds } = await import("../src/lib/spend.js");
+  const card = { type: "CREDIT", bills: [{ dueDate: "2026-11-03", billClosingDate: "2026-10-27" }, { dueDate: "2026-10-05", billClosingDate: "2026-09-26" }], transactions: [
+    { date: "2026-10-26T12:00:00Z", amount: 50, description: "Late Oct buy", operationType: "X", category: "Eating out", card: { billForecastDate: "2026-12" } },
+    { date: "2026-11-10T12:00:00Z", amount: 70, description: "Nov buy", operationType: "X", category: "Eating out", card: { billForecastDate: "2026-12" } },
+  ] };
+  const bank = { type: "BANK", transactions: [
+    { date: "2026-10-26T12:00:00Z", amount: -10, description: "Pix A", operationType: "PIX", category: "Transfer - PIX" },
+    { date: "2026-10-28T12:00:00Z", amount: -20, description: "Pix B", operationType: "PIX", category: "Transfer - PIX" },
+  ] };
+  const p = { items: [{ label: "b1", accounts: [card, bank] }] };
+  const cycles = cardCycles(p, { rules, entity: "me" });
+  assert.deepEqual(cycles.closes, ["2026-09-26", "2026-10-27", "2026-11-27", "2026-12-27"]);
+  assert.equal(cycleOf("2026-10-26", cycles), "2026-10");
+  assert.equal(cycleOf("2026-10-27", cycles), "2026-11");
+  assert.deepEqual(cycleBounds("2026-11", cycles), { start: "2026-10-27", end: "2026-11-27" });
+  const rows = spendRows(p, { rules, compiled, entity: "me", today: "2026-11-23", cycles });
+  assert.deepEqual(rows.map((r) => [r.desc, r.cyc]), [["Late Oct buy", "2026-11"], ["Nov buy", "2026-11"], ["Pix A", "2026-10"], ["Pix B", "2026-11"]]);
+  const v = monthView(rows, { today: "2026-11-23", cycles });
+  assert.equal(v.month, "2026-11");
+  assert.equal(v.spent, 140);
+  assert.equal(v.end, "2026-11-26");
+  assert.equal(v.daysLeft, 4);
+});
