@@ -117,3 +117,10 @@ test("installmentsAhead: months after the open bill, grouped by plan", async () 
   assert.equal(r.total, 230);
   assert.deepEqual(r.plans.map((p) => [p.name, p.left, p.per, p.last]), [["Trip Example", 2, 100, "2027-02"], ["Shop Example", 1, 30, "2027-01"]]);
 });
+
+test("maturities: Nubank's self-renewing daily-liquidity positions stay out of the ladder", () => {
+  const bank = (label, issuer, due, balance) => ({ label, invested: balance, reserved: [], positions: [{ issuer, due, balance, rate: "100% CDI" }] });
+  const m = maturities({ banks: [bank("nubank", "Nubank", "2027-01-01", 100), bank("other", "Acme", "2027-02-01", 50)] }, "2026-11-23");
+  assert.deepEqual(m.rows.map((r) => [r.bank, r.due]), [["other", "2027-02-01"]]);
+  assert.equal(m.total, 50);
+});

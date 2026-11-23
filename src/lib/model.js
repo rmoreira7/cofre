@@ -104,6 +104,10 @@ export function cards(snapshot, rules, entity, today) {
 }
 
 // Maturity ladder: positions grouped by (due date, issuer), with the reinvestment-rule tag.
+// Banks whose own daily-liquidity product carries a nominal due date it renews by itself (Nubank's): not a maturity
+// to act on, so it stays in the holdings but out of the ladder, the alerts and the next-event line.
+const AUTO_RENEW = new Set(["nubank"]);
+
 export function maturities(h, today) {
     const share = {};
   for (const b of h.banks) for (const p of b.positions) {
@@ -114,7 +118,7 @@ export function maturities(h, today) {
   const concentrated = (bank, issuer) => issuers[bank] > 1 && share[`${bank}|${issuer}`] >= CONCENTRATION;
   const groups = new Map();
   for (const b of h.banks) for (const p of b.positions) {
-    if (!p.due) continue;
+    if (!p.due || AUTO_RENEW.has(b.label)) continue;
     const k = `${p.due}|${b.label}|${p.issuer}`;
     const g = groups.get(k) || { due: p.due, bank: b.label, issuer: p.issuer, n: 0, balance: 0, rates: new Set() };
     g.n++; g.balance += p.balance; g.rates.add(p.rate);
@@ -122,7 +126,7 @@ export function maturities(h, today) {
   }
   const rows = [...groups.values()].map((g) => ({
     ...g, rates: [...g.rates], days: daysBetween(today, g.due),
-    tag: /^BRB\b/.test(g.issuer) ? "brb" : concentrated(g.bank, g.issuer) ? "conc" : g.bank === "nubank" ? "liquid" : null,
+    tag: /^BRB\b/.test(g.issuer) ? "brb" : concentrated(g.bank, g.issuer) ? "conc" : null,
   }));
   rows.sort((a, b) => a.due.localeCompare(b.due) || b.balance - a.balance);
   const liquid = h.banks.flatMap((b) => b.reserved.map((p) => ({ ...p, bankName: b.name })));

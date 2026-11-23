@@ -44,7 +44,7 @@ export function render(el, ctx) {
     const rows = mat.rows.filter((r) => r.days >= 0 && (filter === "all" || r.days <= +filter));
     const liquid = mat.liquid.map((p) => `<div class="mat"><div class="date soon"><b>D+0</b><small>diária</small></div><div><b>${esc(p.bankName)} · Cofrinho</b><div class="muted">${esc(p.rate)}</div><div class="mt4"><span class="chip">liquidez diária</span></div></div><b>${brl(p.balance)}</b></div>`);
     list.innerHTML = rows.map((r) => {
-          const tag = r.tag === "brb" ? '<span class="chip bad">não renovar</span>' : r.tag === "conc" ? '<span class="chip warn">concentração</span>' : r.tag === "liquid" ? '<span class="chip">liquidez diária</span>' : "";
+          const tag = r.tag === "brb" ? '<span class="chip bad">não renovar</span>' : r.tag === "conc" ? '<span class="chip warn">concentração</span>' : "";
       return `<div class="mat"><div class="date${r.days <= 90 ? " soon" : ""}"><b>${Number(r.due.slice(8, 10))}</b><small>${MES[Number(r.due.slice(5, 7)) - 1]} ${r.due.slice(2, 4)}</small></div>
         <div><b>${esc(r.issuer)}${r.n > 1 ? ` ×${r.n}` : ""}</b><div class="muted">${esc(r.rates.length > 2 ? `${r.n} títulos` : r.rates.join(" / "))} · em ${r.days} dias</div>${tag ? `<div class="mt4">${tag}</div>` : ""}</div><b>${brl(r.balance)}</b></div>`;
     }).concat(liquid).join("") || '<div class="muted">Nada neste período.</div>';
