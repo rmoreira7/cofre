@@ -167,5 +167,7 @@ export function openBill(account, due) {
   }
   const prev = (account.bills || []).filter((b) => b.dueDate.slice(0, 7) < month).sort((a, b) => b.dueDate.localeCompare(a.dueDate))[0];
   const early = Math.max(0, paid - (prev?.totalAmount || 0));
+  // Nothing tagged for this bill or later (XP tags differently): the balance is the bill.
+  if (!charges && !ahead) return { bill: account.balance || 0, ahead: 0, exact: false };
   return { bill: Math.max(0, charges - early), charges, early, ahead, exact: true };
 }

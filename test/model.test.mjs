@@ -70,3 +70,9 @@ test("openBill: forecast month charges minus early payments; installments ahead"
   assert.deepEqual(openBill(acc, "2026-12-03"), { bill: 650, charges: 850, early: 200, ahead: 400, exact: true });
   assert.deepEqual(openBill({ balance: 46, transactions: [{ amount: 46 }] }, "2026-12-01"), { bill: 46, ahead: 0, exact: false });
 });
+
+test("openBill falls back to the balance when nothing is tagged for the bill", async () => {
+  const { openBill } = await import("../src/lib/model.js");
+  const acc = { balance: 46, bills: [], transactions: [{ amount: 46, operationType: "X", card: { billForecastDate: "2026-09" } }] };
+  assert.deepEqual(openBill(acc, "2026-12-01"), { bill: 46, ahead: 0, exact: false });
+});
