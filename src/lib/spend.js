@@ -1,5 +1,6 @@
 // Spending: a port of the spend side of finance/pluggy/analyze.py build(), plus the clusters of design §5.
 import { categorize, learn, entityOf } from "./categorize.js";
+import { cleanCard } from "./cardtx.js";
 
 export const DEFAULT_TARGET = 7000;
 
@@ -32,7 +33,7 @@ export function isInternal(x, cat) {
 export function spendRows(pulled, { rules, compiled, entity, today }) {
   const items = pulled.items.filter((it) => !it.error && entityOf(it.label, rules) === entity);
   const card = [], bank = [];
-  for (const it of items) for (const a of it.accounts) (a.type === "CREDIT" ? card : bank).push(...a.transactions);
+  for (const it of items) for (const a of it.accounts) (a.type === "CREDIT" ? card : bank).push(...(a.type === "CREDIT" ? cleanCard(a.transactions) : a.transactions));
   const learned = { ...rules.learned, ...learn([...card, ...bank].map((x) => [x.description, x.category ?? null])) };
   const cat = (src, x) => categorize({ src, op: x.operationType, desc: x.description, pluggy: x.category ?? null }, compiled, learned, entity);
 

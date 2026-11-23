@@ -2,6 +2,7 @@
 import { entityOf } from "./categorize.js";
 import { reservedHoldings } from "./pluggy.js";
 import { daysBetween } from "./format.js";
+import { cleanCard } from "./cardtx.js";
 
 export const BANKS = {
   nubank: { name: "Nubank", color: "#8a05be" },
@@ -33,10 +34,10 @@ export function slim(pulled) {
           ),
           credit: a.type === "CREDIT" ? pick(a.creditData || {}, ["creditLimit", "availableCreditLimit", "balanceDueDate", "balanceCloseDate"]) : undefined,
           bills: a.bills?.map((b) => pick(b, ["dueDate", "totalAmount"])),
-          transactions: a.transactions.map((t) => {
+          transactions: (a.type === "CREDIT" ? cleanCard(a.transactions) : a.transactions).map((t) => {
             const out = pick(t, TX);
             const m = t.creditCardMetadata;
-            if (m) out.card = pick(m, ["billForecastDate", "paymentType", "installmentNumber", "totalInstallments"]);
+            if (m) out.card = pick(m, ["billForecastDate", "paymentType", "installmentNumber", "totalInstallments", "purchaseDate"]);
             return out;
           }),
         })),
