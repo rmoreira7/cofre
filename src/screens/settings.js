@@ -51,6 +51,7 @@ export function render(el, ctx) {
       ${rules
         ? `<div class="field"><span>Categorias aprendidas</span><span>${rules.learned.toLocaleString("pt-BR")}</span></div>
       <div class="field"><span>Ajustes manuais · regras</span><span>${rules.overrides} · ${rules.regex}</span></div>
+      <div class="field"><span>Premissas da projeção</span><span>${d.rules.projection ? "incluídas" : "ausentes"}</span></div>
       <div class="field"><span>Exportado em</span><span>${new Date(rules.exportedAt).toLocaleDateString("pt-BR")}</span></div>`
         : `<div class="field"><span>Status</span><span>não importadas</span></div>
       <div class="muted">Gere no notebook com <code>export_rules.py</code> e importe o arquivo aqui. Ele fica só neste aparelho, criptografado.</div>`}

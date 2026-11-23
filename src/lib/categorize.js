@@ -90,6 +90,7 @@ export function parseRulesFile(text) {
   if (raw.v !== RULES_VERSION) throw new Error(`Versão ${raw.v} não suportada (esperado ${RULES_VERSION}).`);
   const isMap = (m) => m && typeof m === "object" && !Array.isArray(m) && Object.values(m).every((v) => typeof v === "string");
   if (!isMap(raw.learned) || !isMap(raw.overrides)) throw new Error("Mapa de categorias inválido.");
+  if (raw.projection != null && (typeof raw.projection !== "object" || !Array.isArray(raw.projection.salary))) throw new Error("Premissas da projeção inválidas.");
   compileRules(raw);
   return raw;
 }

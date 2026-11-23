@@ -10,7 +10,7 @@ import * as maturities from "./screens/maturities.js";
 import * as projection from "./screens/projection.js";
 import * as settings from "./screens/settings.js";
 
-export const APP_VERSION = "0.2.0";
+export const APP_VERSION = "0.3.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, maturities, projection, settings };
 
@@ -43,6 +43,8 @@ export function buildView(data, today) {
   const month = monthView(rows, { today, target: s.target ?? DEFAULT_TARGET, limits: s.limits || {} });
   const m = byMonth(rows, "cluster");
   const last12 = monthRange(month.history[0].month, month.history.at(-2).month);
+  const last3 = last12.slice(-3);
+  const avg3 = last3.reduce((a, k) => a + sum(m[k]), 0) / (last3.length || 1);
   const avgN = last12.length;
   const avg12 = last12.reduce((a, k) => a + sum(m[k]), 0) / (avgN || 1);
   const joint = Object.keys(rules.entities).filter((e) => e !== me).map((e) => {
@@ -58,7 +60,7 @@ export function buildView(data, today) {
     };
   });
   return {
-    today, rows, mine, month, avg12, avgN, joint,
+    today, rows, mine, month, avg12, avgN, avg3, joint,
     cards: cards(snap, rules, me, today),
     mat: maturityLadder(mine, today),
     daysTo: (iso) => daysBetween(today, iso),
