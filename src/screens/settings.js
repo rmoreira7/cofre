@@ -79,7 +79,10 @@ export function render(el, ctx) {
     </div>
     <div class="card">
       <div class="label">Segurança</div>
-      <div class="field"><span>Desbloqueio</span><span>PIN · 6 dígitos</span></div>
+      <div class="field"><span>Desbloqueio</span><span>PIN · 6 dígitos${ctx.bio.enrolled ? " + digital" : ""}</span></div>
+      ${ctx.bio.enrolled ? '<button class="btn ghost" data-a="bio-off">Desativar digital</button>'
+        : ctx.bio.available ? '<button class="btn ghost" data-a="bio-on">Ativar digital</button>'
+        : '<div class="muted">Digital indisponível neste navegador.</div>'}
       <div class="field"><span>Bloquear após</span><span>5 min em segundo plano</span></div>
       <div class="field"><span>Dados no aparelho</span><span>criptografados (AES-GCM)</span></div>
       <button class="btn ghost" data-a="lock">Bloquear agora</button>
@@ -122,6 +125,8 @@ export function render(el, ctx) {
   el.addEventListener("click", async (e) => {
     const a = e.target.closest("button")?.dataset.a;
     if (a === "lock") ctx.lock();
+    if (a === "bio-on") ctx.enrollBio();
+    if (a === "bio-off" && confirm("Desativar o desbloqueio por digital neste aparelho?")) await ctx.disableBio();
     if (a === "refresh") ctx.refresh();
     if (a === "edit") { el.dataset.edit = "1"; render(el, ctx); }
     if (a === "cancel") { delete el.dataset.edit; render(el, ctx); }

@@ -1,4 +1,5 @@
 import { createVault, idbStorage, validPin } from "./lib/vault.js";
+import { createBio } from "./lib/bio.js";
 import { createPluggy } from "./lib/pluggy.js";
 import { compileRules } from "./lib/categorize.js";
 import { spendRows, monthView, byMonth, sum, monthRange, cardCycles, DEFAULT_TARGET } from "./lib/spend.js";
@@ -10,14 +11,18 @@ import * as maturities from "./screens/maturities.js";
 import * as projection from "./screens/projection.js";
 import * as settings from "./screens/settings.js";
 
-export const APP_VERSION = "0.6.1";
+export const APP_VERSION = "0.7.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, maturities, projection, settings };
 
 const app = document.getElementById("app");
 const tabs = document.getElementById("tabs");
 const vault = createVault(idbStorage());
-const state = { data: null, current: "home", view: null, progress: "", busy: false };
+const bio = createBio(idbStorage("cofre", "vault", "bio"), {
+  credentials: navigator.credentials, rpId: location.hostname,
+  isAvailable: () => window.PublicKeyCredential?.isUserVerifyingPlatformAuthenticatorAvailable?.() ?? false,
+});
+const state = { data: null, current: "home", view: null, progress: "", busy: false, bio: { available: false, enrolled: false } };
 
 const ctx = {
   version: APP_VERSION,
@@ -33,8 +38,11 @@ const ctx = {
     await ctx.save({ ...state.data, userOverrides: u });
   },
   lock,
-  async wipe() { await vault.wipe(); location.reload(); },
+  async wipe() { await bio.clear(); await vault.wipe(); location.reload(); },
   go,
+  get bio() { return state.bio; },
+  enrollBio,
+  async disableBio() { await bio.clear(); state.bio.enrolled = false; go("settings"); },
 };
 
 // Everything the screens show, derived once per data change.
@@ -127,7 +135,7 @@ function lock() {
   location.reload();
 }
 
-function pinPad({ title, subtitle, onDone }) {
+function pinPad({ title, subtitle, onDone, extra = "" }) {
   tabs.hidden = true;
   app.innerHTML = `
     <div class="lock">
@@ -139,6 +147,7 @@ function pinPad({ title, subtitle, onDone }) {
         ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button data-k="${n}">${n}</button>`).join("")}
         <button class="ghost" data-k="clear">Limpar</button><button data-k="0">0</button><button class="ghost" data-k="back">⌫</button>
       </div>
+      ${extra}
     </div>`;
   const dots = [...app.querySelectorAll(".pin i")];
   const err = app.querySelector(".err");
@@ -174,6 +183,7 @@ function onboarding() {
     async onDone(pin, ui) {
       if (!first) { first = pin; ui.reset("Confirmar PIN", "Digite o mesmo PIN de novo."); return; }
       if (pin !== first) { first = null; ui.reset("Criar PIN", "Os PINs não conferem. Comece de novo."); return; }
+      await bio.clear();
       await vault.create(pin, { v: 1, settings: { target: DEFAULT_TARGET }, credentials: null, rules: null, snapshot: null });
       state.data = await vault.unlock(pin);
       enter();
@@ -181,20 +191,57 @@ function onboarding() {
   });
 }
 
+async function unlockWith(pin, ui) {
+  try {
+    state.data = await vault.unlock(pin);
+    enter();
+  } catch (e) {
+    if (e.wiped) { await bio.clear(); ui.error("Muitas tentativas. Os dados deste aparelho foram apagados."); setTimeout(() => location.reload(), 2500); return; }
+    ui.error(`PIN incorreto. Restam ${e.left} tentativas.`);
+    throw e;
+  }
+}
+
 function unlockScreen() {
-  pinPad({
+  const withBio = state.bio.available && state.bio.enrolled;
+  const ui = pinPad({
     title: "Cofre",
-    subtitle: "Digite seu PIN",
+    subtitle: withBio ? "Use a digital ou digite seu PIN" : "Digite seu PIN",
+    extra: withBio ? '<button class="btn ghost bio" data-a="bio">Usar digital</button>' : "",
+    async onDone(pin, ui) { await unlockWith(pin, ui).catch(() => {}); },
+  });
+  if (!withBio) return;
+  const tryBio = async () => {
+    let pin;
+    try { pin = await bio.pin(); } catch (e) { if (e.unsupported) ui.error(e.message); return; }
+    // A sealed PIN that no longer opens the vault (the PIN changed, the vault was recreated) is useless: drop it.
+    await unlockWith(pin, ui).catch(async (e) => { if (!e.wiped) { await bio.clear(); state.bio.enrolled = false; ui.error("A digital foi desativada: entre com o PIN e ative de novo em Ajustes."); } });
+  };
+  app.querySelector('[data-a="bio"]').addEventListener("click", tryBio);
+  tryBio();
+}
+
+// Ajustes › Segurança: confirm the PIN, then create the passkey. The PIN check is a real unlock (counts attempts).
+function enrollBio() {
+  pinPad({
+    title: "Ativar digital",
+    subtitle: "Confirme seu PIN. Depois o celular pede a digital.",
+    extra: '<button class="btn ghost" data-a="cancel">Cancelar</button>',
     async onDone(pin, ui) {
+      try { await vault.unlock(pin); } catch (e) {
+        if (e.wiped) { await bio.clear(); location.reload(); return; }
+        ui.error(`PIN incorreto. Restam ${e.left} tentativas.`); return;
+      }
       try {
-        state.data = await vault.unlock(pin);
-        enter();
+        await bio.enroll(pin);
+        state.bio.enrolled = true;
+        enter(); go("settings");
       } catch (e) {
-        if (e.wiped) { ui.error("Muitas tentativas. Os dados deste aparelho foram apagados."); setTimeout(() => location.reload(), 2500); return; }
-        ui.error(`PIN incorreto. Restam ${e.left} tentativas.`);
+        ui.error(e.unsupported ? e.message : e.name === "NotAllowedError" ? "Cancelado. Tente de novo." : `Não foi possível ativar: ${e.message}`);
       }
     },
   });
+  app.querySelector('[data-a="cancel"]').addEventListener("click", () => { enter(); go("settings"); });
 }
 
 function enter() {
@@ -224,4 +271,5 @@ tabs.addEventListener("click", (e) => {
 });
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+state.bio = { available: await bio.available(), enrolled: await bio.enrolled() };
 (await vault.exists()) ? unlockScreen() : onboarding();
