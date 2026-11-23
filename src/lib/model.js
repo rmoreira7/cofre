@@ -33,7 +33,12 @@ export function slim(pulled) {
           ),
           credit: a.type === "CREDIT" ? pick(a.creditData || {}, ["creditLimit", "availableCreditLimit", "balanceDueDate", "balanceCloseDate"]) : undefined,
           bills: a.bills?.map((b) => pick(b, ["dueDate", "totalAmount"])),
-          transactions: a.transactions.map((t) => pick(t, TX)),
+          transactions: a.transactions.map((t) => {
+            const out = pick(t, TX);
+            const m = t.creditCardMetadata;
+            if (m) out.card = pick(m, ["billForecastDate", "paymentType", "installmentNumber", "totalInstallments"]);
+            return out;
+          }),
         })),
         investments: it.investments.filter((i) => i.status === "ACTIVE").map((i) => pick(i, INV)),
       };
@@ -91,7 +96,7 @@ export function cards(snapshot, rules, entity, today) {
       if (a.type !== "CREDIT") continue;
       const next = (a.bills || []).filter((b) => b.dueDate.slice(0, 10) >= today).sort((x, y) => x.dueDate.localeCompare(y.dueDate))[0];
       const due = nextDue(a.credit?.balanceDueDate, today) || next?.dueDate.slice(0, 10) || null;
-      out.push({ bank: it.label, name: bankName(it.label), bill: a.balance || 0, limit: a.credit?.creditLimit || null, due });
+      out.push({ bank: it.label, name: bankName(it.label), used: a.balance || 0, limit: a.credit?.creditLimit || null, due, ...openBill(a, due) });
     }
   }
   return out.sort((a, b) => b.bill - a.bill);
@@ -142,4 +147,24 @@ export function nextDue(iso, today) {
     if (++m === 13) { y++; m = 1; }
   }
   return null;
+}
+
+// The open bill, from each charge's forecast bill month (Pluggy creditCardMetadata.billForecastDate).
+// Payments tagged for that month first settle the previous bill; anything beyond is an early payment.
+// Pluggy's account balance is the used limit (open bill + future installments), not the bill.
+export function openBill(account, due) {
+  const tx = account.transactions || [];
+  if (!due || !tx.some((t) => t.card?.billForecastDate)) return { bill: account.balance || 0, ahead: 0, exact: false };
+  const month = due.slice(0, 7);
+  let charges = 0, paid = 0, ahead = 0;
+  for (const t of tx) {
+    const f = t.card?.billForecastDate?.slice(0, 7);
+    if (!f) continue;
+    if (t.operationType === "PAGAMENTO_FATURA") { if (f === month) paid += -t.amount; continue; }
+    if (f === month) charges += t.amount;
+    else if (f > month) ahead += t.amount;
+  }
+  const prev = (account.bills || []).filter((b) => b.dueDate.slice(0, 7) < month).sort((a, b) => b.dueDate.localeCompare(a.dueDate))[0];
+  const early = Math.max(0, paid - (prev?.totalAmount || 0));
+  return { bill: Math.max(0, charges - early), charges, early, ahead, exact: true };
 }

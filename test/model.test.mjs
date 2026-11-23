@@ -58,3 +58,15 @@ test("maturities: grouped, tagged, concentration and BRB", () => {
   assert.deepEqual(m.conc.map((c) => [c.issuer, c.share]), [["Gamma", 0.7]]);
   assert.equal(m.liquid.length, 1);
 });
+
+test("openBill: forecast month charges minus early payments; installments ahead", async () => {
+  const { openBill } = await import("../src/lib/model.js");
+  const t = (amount, f, op = "X") => ({ amount, operationType: op, card: { billForecastDate: f } });
+  const acc = {
+    balance: 1500,
+    bills: [{ dueDate: "2026-11-03T00:00:00Z", totalAmount: 600 }],
+    transactions: [t(900, "2026-12"), t(-50, "2026-12"), t(-600, "2026-12", "PAGAMENTO_FATURA"), t(-200, "2026-12", "PAGAMENTO_FATURA"), t(300, "2027-01"), t(100, "2027-02"), t(400, "2026-11")],
+  };
+  assert.deepEqual(openBill(acc, "2026-12-03"), { bill: 650, charges: 850, early: 200, ahead: 400, exact: true });
+  assert.deepEqual(openBill({ balance: 46, transactions: [{ amount: 46 }] }, "2026-12-01"), { bill: 46, ahead: 0, exact: false });
+});

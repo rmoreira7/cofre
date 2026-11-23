@@ -42,13 +42,17 @@ export function render(el, ctx) {
           ...b.reserved.map((r) => `<div class="row muted sm"><span><i class="bankdot" style="background:${BANKS[b.label]?.color}"></i>${esc(b.name)} · Cofrinho</span><span class="nowrap">${brl(r.balance, 2)}</span></div>`),
         ]).join("")}</div>` : ""}
     </div>
-    ${cards.filter((c) => c.bill > 0 || c.limit).map((c) => {
-      const used = c.limit ? (c.bill / c.limit) * 100 : null;
+    ${cards.filter((c) => c.bill > 0 || c.used > 0).map((c) => {
+      const used = c.limit ? (c.used / c.limit) * 100 : null;
       const soon = c.due && v.daysTo(c.due) <= 7;
       return `<div class="card">
       <div class="row"><div><div class="label">Fatura ${esc(c.name)}</div><div class="kpi">${brl(c.bill)}</div></div>${c.due ? `<span class="chip${soon ? " warn" : ""}">vence ${ddmm(c.due)}</span>` : ""}</div>
       ${used !== null ? `<div class="track mt10"><div class="fill" style="width:${Math.min(100, used)}%;background:var(${used > 80 ? "--bad" : used > 40 ? "--warn" : "--brand"})"></div></div>
-      <div class="row muted mt6"><span>${pct(used, 0)} do limite</span><span>limite ${brl(c.limit)}</span></div>` : ""}
+      <div class="row muted mt6"><span>${pct(used, 0)} do limite · usado ${brl(c.used)}</span><span>limite ${brl(c.limit)}</span></div>` : ""}
+      ${c.ahead > 0 || c.early > 0 ? `<div class="list mt6">
+        ${c.ahead > 0 ? `<div><span class="l">Parcelado nas próximas faturas</span><b>${brl(c.ahead)}</b></div>` : ""}
+        ${c.early > 0 ? `<div><span class="l">Já pago adiantado<small>abatido da fatura</small></span><b>${brl(c.early)}</b></div>` : ""}
+      </div>` : ""}
     </div>`;
     }).join("")}
     <div class="card">
