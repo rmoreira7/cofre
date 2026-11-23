@@ -26,7 +26,7 @@ export function slim(pulled) {
       if (it.error) return { label: it.label, error: it.error, status: it.status ?? null };
       return {
         label: it.label,
-        item: pick(it.item, ["id", "status", "executionStatus", "consentExpiresAt", "lastUpdatedAt"]),
+        item: pick(it.item, ["id", "status", "executionStatus", "consentExpiresAt", "lastUpdatedAt", "resourcesCollectedAt", "nextAutoSyncAt"]),
         accounts: it.accounts.map((a) => ({
           ...pick(a, ["id", "type", "subtype", "name", "balance"]),
           reserved: reservedHoldings(a).flatMap((r) =>
@@ -133,7 +133,43 @@ export function maturities(h, today) {
 }
 
 export function itemStatus(snapshot) {
-  return snapshot.items.map((it) => ({ label: it.label, name: bankName(it.label), ok: !it.error && it.item?.status === "UPDATED", error: it.error || null, status: it.item?.status || null, consent: it.item?.consentExpiresAt?.slice(0, 10) || null }));
+  return snapshot.items.map((it) => ({
+    label: it.label, name: bankName(it.label), ok: !it.error && it.item?.status === "UPDATED", stale: Boolean(it.stale), error: it.error || null, status: it.item?.status || null,
+    consent: it.item?.consentExpiresAt?.slice(0, 10) || null,
+    collected: it.item?.resourcesCollectedAt || it.item?.lastUpdatedAt || null,
+    nextSync: it.item?.nextAutoSyncAt || null,
+  }));
+}
+
+// Pluggy syncs each bank about once a day. bankAt = the oldest bank data on screen; nextSync = when new data
+// can exist. A refresh before nextSync returns the same data, so auto-refresh waits for it.
+export function freshness(snapshot) {
+  const st = itemStatus(snapshot).filter((s) => s.collected);
+  const bankAt = st.map((s) => s.collected).sort()[0] || null;
+  const nextSync = st.map((s) => s.nextSync).filter(Boolean).sort()[0] || null;
+  return { bankAt, nextSync, pulledAt: snapshot.at };
+}
+
+export function shouldAutoRefresh(snapshot, now = new Date(), { maxAgeH = 24, graceMin = 10 } = {}) {
+  if (!snapshot) return true;
+  const { nextSync, pulledAt } = freshness(snapshot);
+  if (now - new Date(pulledAt) > maxAgeH * 36e5) return true;
+  return Boolean(nextSync && now - new Date(nextSync) > graceMin * 6e4 && new Date(pulledAt) < new Date(nextSync));
+}
+
+// Things that need a decision soon. Plain data; the screen picks the words and colours.
+export function alerts({ mine, joint, mat, cards, today }, { idleCash = 5000, cdbMin = 110, soonDays = 30, billDays = 5 } = {}) {
+  const out = [];
+  const idle = (h, scope) => h.banks.filter((b) => b.checking > idleCash).forEach((b) => out.push({ kind: "idle", scope, bank: b.name, amount: b.checking }));
+  idle(mine, "mine");
+  for (const j of joint) idle(j.holdings, "joint");
+  for (const r of mat.rows.filter((r) => r.days >= 0 && r.days <= soonDays)) out.push({ kind: "maturity", issuer: r.issuer, n: r.n, due: r.due, days: r.days, amount: r.balance, brb: r.tag === "brb", cdbMin });
+  for (const c of cards.filter((c) => c.due && c.bill > 0)) {
+    const d = daysBetween(today, c.due);
+    if (d >= 0 && d <= billDays) out.push({ kind: "bill", bank: c.name, due: c.due, days: d, amount: c.bill });
+  }
+  const rank = { bill: 0, maturity: 1, idle: 2 };
+  return out.sort((a, b) => rank[a.kind] - rank[b.kind] || (a.days ?? 99) - (b.days ?? 99) || b.amount - a.amount);
 }
 
 // Pluggy keeps the last statement's due date until the next statement closes: roll it forward monthly.

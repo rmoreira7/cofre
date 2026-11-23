@@ -76,3 +76,31 @@ test("openBill falls back to the balance when nothing is tagged for the bill", a
   const acc = { balance: 46, bills: [], transactions: [{ amount: 46, operationType: "X", card: { billForecastDate: "2026-09" } }] };
   assert.deepEqual(openBill(acc, "2026-12-01"), { bill: 46, ahead: 0, exact: false });
 });
+
+test("freshness and auto-refresh follow Pluggy's daily sync", async () => {
+  const { freshness, shouldAutoRefresh } = await import("../src/lib/model.js");
+  const snap = { at: "2026-11-23T14:00:00Z", items: [
+    { label: "a", item: { status: "UPDATED", resourcesCollectedAt: "2026-11-22T22:12:00Z", nextAutoSyncAt: "2026-11-23T22:12:00Z" }, accounts: [], investments: [] },
+    { label: "b", item: { status: "UPDATED", resourcesCollectedAt: "2026-11-22T20:14:00Z", nextAutoSyncAt: "2026-11-23T20:14:00Z" }, accounts: [], investments: [] },
+  ] };
+  assert.deepEqual(freshness(snap), { bankAt: "2026-11-22T20:14:00Z", nextSync: "2026-11-23T20:14:00Z", pulledAt: snap.at });
+  assert.equal(shouldAutoRefresh(snap, new Date("2026-11-23T18:00:00Z")), false);
+  assert.equal(shouldAutoRefresh(snap, new Date("2026-11-23T20:30:00Z")), true);
+  assert.equal(shouldAutoRefresh({ ...snap, at: "2026-11-23T20:40:00Z" }, new Date("2026-11-23T21:00:00Z")), false);
+  assert.equal(shouldAutoRefresh(snap, new Date("2026-11-24T15:00:00Z")), true);
+  assert.equal(shouldAutoRefresh(null), true);
+});
+
+test("alerts: bill soon, maturity soon, idle cash; ranked", async () => {
+  const { alerts } = await import("../src/lib/model.js");
+  const bank = (name, checking) => ({ name, checking });
+  const v = {
+    today: "2026-11-23",
+    mine: { banks: [bank("A", 700), bank("B", 9000)] },
+    joint: [{ holdings: { banks: [bank("J", 87000)] } }],
+    mat: { rows: [{ issuer: "Alfa", n: 1, due: "2026-12-08", days: 15, balance: 2000, tag: null }, { issuer: "BRB", n: 3, due: "2027-03-03", days: 100, balance: 9, tag: "brb" }] },
+    cards: [{ name: "Card", due: "2026-11-26", bill: 500 }, { name: "Late", due: "2026-12-20", bill: 10 }],
+  };
+  const a = alerts(v, { idleCash: 5000 });
+  assert.deepEqual(a.map((x) => [x.kind, x.bank || x.issuer, x.scope || ""]), [["bill", "Card", ""], ["maturity", "Alfa", ""], ["idle", "J", "joint"], ["idle", "B", "mine"]]);
+});

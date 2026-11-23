@@ -1,6 +1,6 @@
 import { parseRulesFile, rulesSummary } from "../lib/categorize.js";
 import { CLUSTERS, DEFAULT_TARGET } from "../lib/spend.js";
-import { brl, ddmmyyyy, esc } from "../lib/format.js";
+import { brl, ddmmyyyy, esc, when } from "../lib/format.js";
 import { itemStatus } from "../lib/model.js";
 
 const ITEM_RX = /^[a-z0-9_-]{1,32}:[0-9a-f-]{36}$/i;
@@ -39,8 +39,9 @@ export function render(el, ctx) {
         <div class="field"><span>Client ID / Secret</span><span>●●●●●● salvo</span></div>
         ${creds.items.map((i) => {
           const st = status.find((x) => x.label === i.label);
-          const txt = !st ? "sem dados" : st.ok ? `conectado${st.consent ? " · até " + ddmmyyyy(st.consent) : ""}` : st.error ? "erro na última atualização" : (st.status || "").toLowerCase();
-          return `<div class="field"><span>${esc(st?.name || i.label)}</span><span class="${st?.ok ? "ok" : st ? "bad" : ""}">${esc(txt)}</span></div>`;
+          const txt = !st ? "sem dados" : st.stale ? "falhou · mostrando dados anteriores" : st.ok ? `conectado${st.consent ? " · até " + ddmmyyyy(st.consent) : ""}` : st.error ? "erro na última atualização" : (st.status || "").toLowerCase();
+          const data = st?.collected ? when(st.collected) : null;
+          return `<div class="field"><span>${esc(st?.name || i.label)}${data ? `<small class="block${data.stale ? " stale" : ""}">dados de ${data.text}</small>` : ""}</span><span class="${st?.ok && !st.stale ? "ok" : st ? "bad" : ""}">${esc(txt)}</span></div>`;
         }).join("")}
         <div class="muted mt6" data-p>${ctx.progress || ""}</div>
         <button class="btn" data-a="refresh">Atualizar agora</button>
@@ -65,6 +66,7 @@ export function render(el, ctx) {
         <label class="in row"><span>Gasto mensal (R$)</span><input name="target" type="number" inputmode="numeric" min="0" step="100" value="${s.target ?? DEFAULT_TARGET}"></label>
         <label class="in row"><span>Mês de gastos</span><select name="monthMode"><option value="cycle" ${s.monthMode !== "calendar" ? "selected" : ""}>ciclo do cartão</option><option value="calendar" ${s.monthMode === "calendar" ? "selected" : ""}>mês civil</option></select></label>
         <label class="in row"><span>CDI (% a.a.)</span><input name="cdi" type="number" inputmode="decimal" min="0" step="0.05" value="${s.cdi ?? 13.65}"></label>
+        <label class="in row"><span>Alerta de dinheiro parado (R$)</span><input name="idleCash" type="number" inputmode="numeric" min="0" step="500" value="${s.idleCash ?? 5000}"></label>
         <label class="in row"><span>CDB mínimo (% CDI)</span><input name="cdbMin" type="number" inputmode="numeric" min="0" step="1" value="${s.cdbMin ?? 110}"></label>
         <details><summary>Limites por grupo <span class="muted">${CLUSTERS.filter((c) => c.limit !== null).length} grupos</span></summary>
           ${CLUSTERS.filter((c) => c.limit !== null).map((c) => `<label class="in row"><span>${c.label}</span><input name="l_${c.id}" type="number" inputmode="numeric" min="0" step="10" value="${s.limits?.[c.id] ?? c.limit}"></label>`).join("")}
@@ -94,7 +96,7 @@ export function render(el, ctx) {
     e.preventDefault();
     const f = goals.elements;
     const limits = Object.fromEntries(CLUSTERS.filter((c) => c.limit !== null).map((c) => [c.id, Math.max(0, Number(f[`l_${c.id}`].value) || 0)]));
-    await ctx.save({ ...ctx.data, settings: { ...s, monthMode: f.monthMode.value, target: Math.max(0, Number(f.target.value) || 0), cdi: Number(f.cdi.value) || 13.65, cdbMin: Number(f.cdbMin.value) || 110, limits } });
+    await ctx.save({ ...ctx.data, settings: { ...s, monthMode: f.monthMode.value, target: Math.max(0, Number(f.target.value) || 0), cdi: Number(f.cdi.value) || 13.65, cdbMin: Number(f.cdbMin.value) || 110, idleCash: Math.max(0, Number(f.idleCash.value) || 0), limits } });
     ctx.go("settings");
   });
 

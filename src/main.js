@@ -2,7 +2,7 @@ import { createVault, idbStorage, validPin } from "./lib/vault.js";
 import { createPluggy } from "./lib/pluggy.js";
 import { compileRules } from "./lib/categorize.js";
 import { spendRows, monthView, byMonth, sum, monthRange, cardCycles, DEFAULT_TARGET } from "./lib/spend.js";
-import { slim, holdings, cards, maturities as maturityLadder, primaryEntity, bankName } from "./lib/model.js";
+import { slim, holdings, cards, maturities as maturityLadder, primaryEntity, bankName, alerts, shouldAutoRefresh } from "./lib/model.js";
 import { localToday, daysBetween, ddmmyyyy } from "./lib/format.js";
 import * as home from "./screens/home.js";
 import * as spend from "./screens/spend.js";
@@ -10,7 +10,7 @@ import * as maturities from "./screens/maturities.js";
 import * as projection from "./screens/projection.js";
 import * as settings from "./screens/settings.js";
 
-export const APP_VERSION = "0.3.2";
+export const APP_VERSION = "0.4.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, maturities, projection, settings };
 
@@ -23,6 +23,7 @@ const ctx = {
   version: APP_VERSION,
   get data() { return state.data; },
   get progress() { return state.progress; },
+  get busy() { return state.busy; },
   async save(data) { await vault.save(data); state.data = data; state.view = null; },
   view: () => (state.view ||= buildView(state.data, localToday())),
   refresh,
@@ -52,6 +53,7 @@ export function buildView(data, today) {
     const h = holdings(snap, rules, e);
     const pos = h.banks.flatMap((b) => b.positions).sort((a, b) => b.balance - a.balance).slice(0, 3);
     return {
+      holdings: h,
       title: `Conta conjunta · ${h.banks.map((b) => b.name).join(" + ")}`,
       total: h.total,
       lines: [
@@ -60,12 +62,14 @@ export function buildView(data, today) {
       ],
     };
   });
-  return {
+  const v = {
     today, rows, mine, month, avg12, avgN, avg3, joint,
     cards: cards(snap, rules, me, today),
     mat: maturityLadder(mine, today),
     daysTo: (iso) => daysBetween(today, iso),
   };
+  v.alerts = alerts(v, { idleCash: s.idleCash ?? 5000, cdbMin: s.cdbMin ?? 110 });
+  return v;
 }
 
 async function refresh() {
@@ -73,7 +77,14 @@ async function refresh() {
   if (!c || state.busy) return;
   state.busy = true;
   const done = [];
-  const say = (t) => { state.progress = t; const p = document.querySelector("[data-p]"); if (p) p.textContent = t; document.body.classList.toggle("busy", state.busy); };
+  const say = (t) => {
+    state.progress = t;
+    const p = document.querySelector("[data-p]");
+    if (p) p.textContent = t;
+    const sub = document.querySelector(".top .sub");
+    if (sub && state.busy) sub.textContent = "Atualizando…";
+    document.body.classList.toggle("busy", state.busy);
+  };
   say("Atualizando…");
   try {
     const p = createPluggy({ clientId: c.clientId, clientSecret: c.clientSecret });
@@ -183,12 +194,23 @@ function unlockScreen() {
 function enter() {
   tabs.hidden = false;
   go(state.current);
+  maybeRefresh();
+}
+
+// At most one automatic attempt per 15 min, so a failing bank or no signal doesn't retry on every app switch.
+let lastAuto = 0;
+function maybeRefresh() {
+  if (!state.data?.credentials || !state.data?.rules || state.busy || Date.now() - lastAuto < 15 * 6e4) return;
+  if (!shouldAutoRefresh(state.data.snapshot)) return;
+  lastAuto = Date.now();
+  refresh();
 }
 
 let hiddenAt = 0;
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) hiddenAt = Date.now();
   else if (vault.unlocked && hiddenAt && Date.now() - hiddenAt > AUTO_LOCK_MS) lock();
+  else if (vault.unlocked) maybeRefresh();
 });
 tabs.addEventListener("click", (e) => {
   const b = e.target.closest("button");

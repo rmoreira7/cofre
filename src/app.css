@@ -115,3 +115,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;back
 body.busy [data-a="refresh"] svg{animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){body.busy [data-a="refresh"] svg{animation:none}}
+.alert-card{border-color:color-mix(in srgb,var(--warn) 40%,var(--line))}
+.alert-card .label{color:var(--warn)}
+small.block{display:block;color:var(--ink-3);font-size:12px;font-weight:400}
+small.block.stale{color:var(--warn)}

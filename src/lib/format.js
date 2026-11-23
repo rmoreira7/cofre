@@ -22,11 +22,16 @@ export function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 
-export function ago(iso, now = new Date()) {
-  const h = (now - new Date(iso)) / 36e5;
+// "hoje, 11:42" / "ontem, 23:21" / "22/11, 23:21". stale = older than staleH hours.
+export function when(iso, now = new Date(), staleH = 30) {
   const t = new Date(iso);
   const hhmm = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
-  if (h < 24 && localToday(t) === localToday(now)) return { text: `Atualizado hoje, ${hhmm}`, stale: false };
-  if (h < 24) return { text: `Atualizado ontem, ${hhmm}`, stale: false };
-  return { text: `Atualizado há ${Math.floor(h / 24) >= 2 ? Math.floor(h / 24) + " dias" : Math.floor(h) + " h"}`, stale: true };
+  const y = new Date(now); y.setDate(y.getDate() - 1);
+  const day = localToday(t) === localToday(now) ? "hoje" : localToday(t) === localToday(y) ? "ontem" : ddmm(localToday(t));
+  return { text: `${day}, ${hhmm}`, stale: (now - t) / 36e5 > staleH };
+}
+
+export function ago(iso, now = new Date()) {
+  const w = when(iso, now, 24);
+  return { text: `Atualizado ${w.text}`, stale: w.stale };
 }
