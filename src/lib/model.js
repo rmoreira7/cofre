@@ -11,7 +11,14 @@ export const BANKS = {
   itau: { name: "Itaú", color: "var(--joint)", codes: ["341"] },
   neon: { name: "Neon", color: "#00a3b4", codes: ["536", "655"] },
   mercadopago: { name: "Mercado Pago", color: "#00b1ea", codes: ["323"] },
+  // balanceOnly: Meu Pluggy gives Wise's balances but not its card purchases (only currency conversions), so its
+  // transactions are dropped; the money spent abroad stays counted when it leaves for Wise ("Sent abroad (Wise)").
+  wise: { name: "Wise", color: "#9fe870", codes: [], balanceOnly: true },
 };
+
+// Balances in another currency, in BRL with the rates the snapshot carries ({ USD: 5.9, … }). Unknown rate → 0, and
+// the account is listed in holdings' `unpriced`.
+export const toBRL = (amount, currency, fx) => (!currency || currency === "BRL" ? amount : fx?.[currency] ? amount * fx[currency] : 0);
 export const bankName = (label) => BANKS[label]?.name || label;
 export const CONCENTRATION = 0.4;
 
@@ -29,13 +36,13 @@ export function slim(pulled) {
         label: it.label,
         item: pick(it.item, ["id", "status", "executionStatus", "consentExpiresAt", "lastUpdatedAt", "resourcesCollectedAt", "nextAutoSyncAt"]),
         accounts: it.accounts.map((a) => ({
-          ...pick(a, ["id", "type", "subtype", "name", "balance"]),
+          ...pick(a, ["id", "type", "subtype", "name", "balance", "currencyCode"]),
           reserved: reservedHoldings(a).flatMap((r) =>
             (r.availableAmounts || []).filter((x) => x.amount).map((x) => ({ name: r.name, amount: x.amount, pct: x.remuneration?.postFixedIndexerPercentage ?? null })),
           ),
           credit: a.type === "CREDIT" ? pick(a.creditData || {}, ["creditLimit", "availableCreditLimit", "balanceDueDate", "balanceCloseDate"]) : undefined,
           bills: a.bills?.map((b) => pick(b, ["dueDate", "totalAmount", "billClosingDate"])),
-          transactions: (a.type === "CREDIT" ? cleanCard(a.transactions) : a.transactions).map((t) => {
+          transactions: (BANKS[it.label]?.balanceOnly ? [] : a.type === "CREDIT" ? cleanCard(a.transactions) : a.transactions).map((t) => {
             const out = pick(t, TX);
             // Bank codes only (never account numbers): who sent and who received a transfer, for income detection.
             const pd = t.paymentData;
@@ -85,10 +92,12 @@ export function holdings(snapshot, rules, entity) {
     if (it.error || entityOf(it.label, rules) !== entity) continue;
     const positions = positionsOf(it);
     const invested = positions.reduce((a, p) => a + p.balance, 0);
-    const checking = it.accounts.filter((a) => a.type !== "CREDIT").reduce((a, x) => a + (x.balance || 0), 0);
+    const bankAcc = it.accounts.filter((a) => a.type !== "CREDIT");
+    const checking = bankAcc.reduce((a, x) => a + toBRL(x.balance || 0, x.currencyCode, snapshot.fx), 0);
+    const foreign = bankAcc.filter((x) => x.currencyCode && x.currencyCode !== "BRL" && x.balance).map((x) => ({ currency: x.currencyCode, amount: x.balance, brl: toBRL(x.balance, x.currencyCode, snapshot.fx) }));
     const cdi = positions.filter((p) => p.cdi);
     const cdiAvg = cdi.length ? cdi.reduce((a, p) => a + p.cdi * p.balance, 0) / cdi.reduce((a, p) => a + p.balance, 0) : null;
-    banks.push({ label: it.label, name: bankName(it.label), invested, checking, total: invested + checking, positions, cdiAvg, count: positions.filter((p) => !p.liquid).length, reserved: positions.filter((p) => p.liquid) });
+    banks.push({ label: it.label, name: bankName(it.label), invested, checking, total: invested + checking, positions, cdiAvg, count: positions.filter((p) => !p.liquid).length, reserved: positions.filter((p) => p.liquid), foreign });
   }
   banks.sort((a, b) => b.total - a.total);
   return { total: banks.reduce((a, b) => a + b.total, 0), banks };

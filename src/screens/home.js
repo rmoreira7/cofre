@@ -42,7 +42,7 @@ export function render(el, ctx) {
       <div class="split">${big.map((b) => `<div class="tile"><span class="muted"><i class="bankdot" style="background:${BANKS[b.label]?.color}"></i>${esc(b.name)}</span><b>${mil(b.total)}</b><span class="muted">${b.cdiAvg ? `~${pct(b.cdiAvg, 0)} CDI · ` : ""}${b.count} ${b.count === 1 ? "título" : "títulos"}</span></div>`).join("")}</div>
       ${small.length ? `<div class="others"><div class="row muted"><span>Outras contas</span><span class="ink">${brl(smallTotal, 2)}</span></div>
         ${small.flatMap((b) => [
-          b.checking || !b.reserved.length ? `<div class="row muted sm"><span><i class="bankdot" style="background:${BANKS[b.label]?.color}"></i>${esc(b.name)}</span><span>${brl(b.checking, 2)}</span></div>` : "",
+          b.checking || !b.reserved.length ? `<div class="row muted sm"><span><i class="bankdot" style="background:${BANKS[b.label]?.color}"></i>${esc(b.name)}${b.foreign?.length ? `<small class="block">${b.foreign.map((f) => `${f.currency} ${f.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${f.brl ? "" : " · sem cotação"}`).join(" · ")}</small>` : ""}</span><span>${brl(b.checking, 2)}</span></div>` : "",
           ...b.reserved.map((r) => `<div class="row muted sm"><span><i class="bankdot" style="background:${BANKS[b.label]?.color}"></i>${esc(b.name)} · Cofrinho</span><span class="nowrap">${brl(r.balance, 2)}</span></div>`),
         ]).join("")}</div>` : ""}
     </div>

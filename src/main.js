@@ -11,7 +11,7 @@ import * as maturities from "./screens/maturities.js";
 import * as projection from "./screens/projection.js";
 import * as settings from "./screens/settings.js";
 
-export const APP_VERSION = "0.8.0";
+export const APP_VERSION = "0.8.1";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, maturities, projection, settings };
 
@@ -94,6 +94,23 @@ export function buildView(data, today) {
   return v;
 }
 
+// BRL rates for the foreign-currency balances (Wise). Only currency codes leave the device. On failure the previous
+// rates stay (marked with their own date); with none, those balances count as 0 until a rate is fetched.
+async function rates(snapshot, prev) {
+  const cur = [...new Set(snapshot.items.flatMap((it) => (it.accounts || []).map((a) => a.currencyCode)).filter((c) => c && c !== "BRL"))];
+  if (!cur.length) return prev || null;
+  try {
+    const r = await fetch(`https://economia.awesomeapi.com.br/json/last/${cur.map((c) => `${c}-BRL`).join(",")}`);
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    const out = { at: new Date().toISOString() };
+    for (const c of cur) { const v = Number(j[`${c}BRL`]?.bid); if (v > 0) out[c] = v; }
+    return Object.keys(out).length > 1 ? out : prev || null;
+  } catch {
+    return prev || null;
+  }
+}
+
 async function refresh() {
   const c = state.data?.credentials;
   if (!c || state.busy) return;
@@ -114,6 +131,7 @@ async function refresh() {
     const failed = pulled.items.filter((i) => i.error);
     const prev = state.data.snapshot;
     const next = slim(pulled);
+    next.fx = await rates(next, prev?.fx);
     // A failed bank keeps its previous data instead of disappearing from the totals.
     next.items = next.items.map((it) => (it.error && prev?.items.find((o) => o.label === it.label && !o.error)) ? { ...prev.items.find((o) => o.label === it.label && !o.error), stale: true } : it);
     await ctx.save({ ...state.data, snapshot: next });

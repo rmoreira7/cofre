@@ -137,3 +137,19 @@ test("mergeLadders: joint rows flagged and sorted in, totals kept apart, BRB = l
   assert.equal(m.conc[0].joint, true);
   assert.equal(m.liquid[0].joint, true);
 });
+
+test("Wise: balance-only (transactions dropped), foreign balances in BRL at the snapshot's rates", async () => {
+  const { slim, holdings, toBRL } = await import("../src/lib/model.js");
+  const r = { ...rules, entities: { me: { banks: ["wise"] } } };
+  const s = slim({ at: "x", items: [{ label: "wise", item: {}, investments: [], accounts: [
+    { id: "u", type: "BANK", balance: 100, currencyCode: "USD", transactions: [{ id: "t", date: "2026-11-01T00:00:00Z", amount: 50, description: "Money added", operationType: "X" }] },
+    { id: "b", type: "BANK", balance: 7.5, currencyCode: "BRL", transactions: [] },
+  ] }] });
+  assert.equal(s.items[0].accounts[0].transactions.length, 0);
+  assert.equal(holdings(s, r, "me").total, 7.5);
+  s.fx = { USD: 5.9 };
+  const h = holdings(s, r, "me");
+  assert.equal(Math.round(h.total * 100) / 100, 597.5);
+  assert.deepEqual(h.banks[0].foreign, [{ currency: "USD", amount: 100, brl: 590 }]);
+  assert.equal(toBRL(10, "EUR", { USD: 5 }), 0);
+});
