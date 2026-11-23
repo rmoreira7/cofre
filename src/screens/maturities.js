@@ -2,6 +2,7 @@ import { brl, mil, pct, MES, ddmmyyyy, esc } from "../lib/format.js";
 import { HORIZONS, CDB_RATES, breakEven, curves } from "../lib/cdblca.js";
 import { bankName } from "../lib/model.js";
 import { maturitiesIcs } from "../lib/ics.js";
+import { ladder } from "../lib/ladder.js";
 import { header, needsSetup } from "./home.js";
 
 const CCOL = ["--c-bills", "--c-trans", "--c-travel", "--c-shop", "--c-health", "--c-food"];
@@ -17,12 +18,16 @@ export function render(el, ctx) {
   const banks = (joint) => [...new Set(mat.rows.filter((r) => Boolean(r.joint) === joint).map((r) => bankName(r.bank)))].join(" + ");
   const sub = [mat.total ? `${banks(false)} · ${mil(mat.total)}` : "", mat.jointTotal ? `${banks(true)} (conjunta) · ${mil(mat.jointTotal)}` : ""].filter(Boolean).join(" · ");
 
-  el.innerHTML = `${header(ctx, "Vencimentos")}
+  const v = ctx.view();
+  // The ladder simulation takes a few hundred ms: computed once per data change, on first open of this tab.
+  const lad = (v.ladder ||= ladder(mat.rows.filter((r) => !r.joint), { today: v.today }));
+  const reserve = v.mine.banks.filter((b) => AUTO_RENEW_LABELS.includes(b.label)).reduce((a, b) => a + b.invested, 0);
+  el.innerHTML = `${header(ctx, "Vencimentos", `<button class="icon-btn" data-a="ics" aria-label="Adicionar vencimentos à agenda">${CAL_ICON}</button>`)}
     <div class="sub mb10">${esc(sub)}</div>
+    ${lad.total ? ladderCard(lad, reserve) + planCard(lad) + aheadCard(lad) : ""}
     <div class="seg">${[["90", "90 dias"], ["365", "12 meses"], ["all", "Todos"]].map(([f, l]) => `<button data-f="${f}" class="${f === filter ? "on" : ""}">${l}</button>`).join("")}</div>
     <div class="card" data-list></div>
-    <button class="btn ghost" data-a="ics">Adicionar vencimentos à agenda (.ics)</button>
-    <div class="muted mb10">Um evento por vencimento, com aviso 7 dias antes. Baixar de novo atualiza os mesmos eventos.</div>
+
     <div class="card">
       <div class="label">Regras de reinvestimento</div>
       <div class="rule"><i class="r-ok">1</i><span><b>Liquidez primeiro</b> — dinheiro novo curto (≤ 12 meses) ou liquidez diária: entrada do financiamento.</span></div>
@@ -97,4 +102,47 @@ export function render(el, ctx) {
   }));
   paint();
   paintCalc();
+}
+
+const AUTO_RENEW_LABELS = ["nubank"];
+const CAL_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M12 13v5M9.5 15.5h5"/></svg>`;
+const termTxt = (m) => (m % 12 === 0 ? `${m / 12} ${m === 12 ? "ano" : "anos"}` : `${m} meses`);
+const pc = (x) => pct(x * 100, 1);
+const toneOf = (share, t) => (Math.abs(share - t) <= 0.03 ? "on" : share > t ? "over" : "under");
+
+// 1 · the ladder today: one bar per rung against the equal share; the daily-liquidity reserve shown apart.
+function ladderCard(l, reserve) {
+  const t = 1 / l.now.length, scale = Math.max(t, ...l.now.map((r) => r.share)) * 1.08;
+  return `<div class="card">
+    <div class="row"><div class="label">Escada de vencimentos</div><span class="muted sm">meta ${pc(t)} cada</span></div>
+    ${reserve ? `<div class="rung reserve"><span class="k">0–3m</span><div class="rb"></div><span class="v"><b>${brl(reserve)}</b><span class="muted">Nubank · reserva</span></span></div>` : ""}
+    ${l.now.map((r) => {
+      const tone = toneOf(r.share, t);
+      return `<div class="rung"><span class="k">${r.label}</span><div class="rb"><i class="${tone}" style="width:${(r.share / scale) * 100}%"></i><span class="tg" style="left:${(t / scale) * 100}%"></span></div>
+        <span class="v"><b>${pc(r.share)}</b><span class="${tone}">${tone === "on" ? "na meta" : `${r.gap > 0 ? "+" : "−"}${brl(Math.abs(r.gap)).replace("R$ ", "")}`}</span></span></div>`;
+    }).join("")}
+    <div class="muted sm mt6">Azul: falta · laranja: sobra · traço: meta. A reserva diária fica fora do %.</div>
+  </div>`;
+}
+
+// 2 · how to reinvest each upcoming maturity.
+function planCard(l) {
+  if (!l.plan.length) return "";
+  return `<div class="card"><div class="row"><div class="label">Como reinvestir</div><span class="muted sm">próximos vencimentos</span></div>
+    ${l.plan.slice(0, 6).map((p) => `<div class="mat-row"><div class="row"><span><b>${Number(p.due.slice(8))} ${MES[Number(p.due.slice(5, 7)) - 1]} ${p.due.slice(2, 4)}</b> · ${esc(p.issuers.join(", "))}${p.brb ? ' <span class="chip bad">não renovar</span>' : ""}</span><b class="nowrap">${brl(p.amount)}</b></div>
+      <div class="buys">${p.buys.map((b) => `<span class="lbuy">${brl(b.amount)} → ${termTxt(b.months)}</span>`).join("")}</div></div>`).join("")}
+    <div class="muted sm mt6">Um CDB a cada ~R$ 7 mil. Recalculado a cada atualização, com o que de fato venceu e foi aplicado.</div>
+  </div>`;
+}
+
+// 3 · where it lands at the end of the horizon, with and without the plan.
+function aheadCard(l) {
+  if (!l.plan.length) return "";
+  const t = 1 / l.now.length;
+  const bars = (arr) => `<div class="mini" style="--n:${arr.length}">${arr.map((x) => `<i class="${toneOf(x, t)}" style="height:${(x / Math.max(t, ...arr)) * 100}%"></i>`).join("")}</div>
+    <div class="mini lbl" style="--n:${arr.length}">${arr.map((x, k) => `<span>${l.now[k].label}<br>${pct(x * 100, 0)}</span>`).join("")}</div>`;
+  return `<div class="card"><div class="row"><div class="label">Em 12 meses</div><span class="muted sm">${MES[Number(l.end.slice(5, 7)) - 1]}/${l.end.slice(2, 4)}, % por degrau</span></div>
+    <div class="row muted sm mt6"><span>Sem o plano</span><span>maior degrau ${pct(Math.max(...l.without) * 100, 0)}</span></div>${bars(l.without)}
+    <div class="row muted sm mt8"><span>Seguindo o plano</span><span>maior degrau ${pct(Math.max(...l.with) * 100, 0)}</span></div>${bars(l.with)}
+  </div>`;
 }
