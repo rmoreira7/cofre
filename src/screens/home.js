@@ -62,7 +62,7 @@ export function render(el, ctx) {
       <div class="row"><div class="label">Próximos eventos</div><span class="muted">30 dias</span></div>
       <div class="list mt6">
         <div><span class="l">Gasto do mês<small>${brl(month.spent)} de ${brl(month.target)}</small></span><span class="chip${month.over ? " bad" : monthPct > 80 ? " warn" : ""}">${pct(monthPct, 0)}</span></div>
-        ${nextMat ? `<div><span class="l">${esc(nextMat.issuer)}${nextMat.n > 1 ? ` ×${nextMat.n}` : ""} vence<small>${ddmm(nextMat.due)} · ${esc(nextMat.rates.join(" / "))}${nextMat.days > 30 ? ` · em ${nextMat.days} dias` : ""}</small></span><b>${brl(nextMat.balance)}</b></div>` : ""}
+        ${nextMat ? `<div><span class="l">${esc(nextMat.issuer)}${nextMat.n > 1 ? ` ×${nextMat.n}` : ""} vence<small>${ddmm(nextMat.due)}${nextMat.joint ? " · conta conjunta" : ""} · ${esc(nextMat.rates.join(" / "))}${nextMat.days > 30 ? ` · em ${nextMat.days} dias` : ""}</small></span><b>${brl(nextMat.balance)}</b></div>` : ""}
       </div>
     </div>
     ${joint.map((j) => `<div class="card joint-card">
@@ -81,7 +81,7 @@ function alertsCard(list) {
   if (!list.length) return "";
   const row = (a) => {
     if (a.kind === "bill") return `<div><span class="l">Fatura ${esc(a.bank)} ${a.days === 0 ? "vence hoje" : `vence em ${a.days} ${a.days === 1 ? "dia" : "dias"}`}<small>${ddmm(a.due)}</small></span><b>${brl(a.amount)}</b></div>`;
-    if (a.kind === "maturity") return `<div><span class="l">${esc(a.issuer)}${a.n > 1 ? ` ×${a.n}` : ""} vence em ${a.days} ${a.days === 1 ? "dia" : "dias"}<small>${a.brb ? "não renovar no BRB" : `reinvestir em CDB ≥ ${a.cdbMin}% CDI ou liquidez diária`}</small></span><b>${brl(a.amount)}</b></div>`;
+    if (a.kind === "maturity") return `<div><span class="l">${esc(a.issuer)}${a.n > 1 ? ` ×${a.n}` : ""} vence em ${a.days} ${a.days === 1 ? "dia" : "dias"}<small>${a.scope === "joint" ? "conta conjunta · " : ""}${a.brb ? "não renovar no BRB" : `reinvestir em CDB ≥ ${a.cdbMin}% CDI ou liquidez diária`}</small></span><b>${brl(a.amount)}</b></div>`;
     return `<div><span class="l">${brl(a.amount)} parados na conta<small>${esc(a.bank)}${a.scope === "joint" ? " · conta conjunta" : ""} · investir o que passar da reserva</small></span><span class="chip warn">parado</span></div>`;
   };
   return `<div class="card alert-card"><div class="label">Atenção</div><div class="list mt6">${list.map(row).join("")}</div></div>`;

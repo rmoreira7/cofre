@@ -3,7 +3,7 @@ import { createBio } from "./lib/bio.js";
 import { createPluggy } from "./lib/pluggy.js";
 import { compileRules } from "./lib/categorize.js";
 import { spendRows, monthView, byMonth, sum, monthRange, cardCycles, DEFAULT_TARGET } from "./lib/spend.js";
-import { slim, holdings, cards, maturities as maturityLadder, primaryEntity, bankName, alerts, shouldAutoRefresh, installmentsAhead } from "./lib/model.js";
+import { slim, holdings, cards, maturities as maturityLadder, mergeLadders, primaryEntity, bankName, alerts, shouldAutoRefresh, installmentsAhead } from "./lib/model.js";
 import { localToday, daysBetween, ddmmyyyy } from "./lib/format.js";
 import * as home from "./screens/home.js";
 import * as spend from "./screens/spend.js";
@@ -11,7 +11,7 @@ import * as maturities from "./screens/maturities.js";
 import * as projection from "./screens/projection.js";
 import * as settings from "./screens/settings.js";
 
-export const APP_VERSION = "0.7.0";
+export const APP_VERSION = "0.7.1";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, maturities, projection, settings };
 
@@ -78,7 +78,7 @@ export function buildView(data, today) {
   const v = {
     today, rows, mine, month, avg12, avgN, avg3, joint,
     cards: cards(snap, rules, me, today),
-    mat: maturityLadder(mine, today),
+    mat: mergeLadders(maturityLadder(mine, today), joint.map((j) => maturityLadder(j.holdings, today))),
     daysTo: (iso) => daysBetween(today, iso),
   };
   v.installments = installmentsAhead(snap, rules, me, today);

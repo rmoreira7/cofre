@@ -162,12 +162,27 @@ export function shouldAutoRefresh(snapshot, now = new Date(), { maxAgeH = 24, gr
 }
 
 // Things that need a decision soon. Plain data; the screen picks the words and colours.
+// One ladder for Vencimentos: the owner's plus each joint account's, joint rows flagged. Concentration and BRB stay
+// per account (computed inside each ladder); totals stay apart, since the joint money is not the owner's.
+export function mergeLadders(own, joints = []) {
+  const flag = (xs) => xs.map((x) => ({ ...x, joint: true }));
+  const rows = [...own.rows, ...joints.flatMap((m) => flag(m.rows))].sort((a, b) => a.due.localeCompare(b.due) || b.balance - a.balance);
+  return {
+    rows,
+    liquid: [...own.liquid, ...joints.flatMap((m) => flag(m.liquid))],
+    conc: [...own.conc, ...joints.flatMap((m) => flag(m.conc))],
+    brbLast: [own.brbLast, ...joints.map((m) => m.brbLast)].filter(Boolean).sort().at(-1) || null,
+    total: own.total,
+    jointTotal: joints.reduce((a, m) => a + m.total, 0),
+  };
+}
+
 export function alerts({ mine, joint, mat, cards, today }, { idleCash = 5000, cdbMin = 110, soonDays = 30, billDays = 5 } = {}) {
   const out = [];
   const idle = (h, scope) => h.banks.filter((b) => b.checking > idleCash).forEach((b) => out.push({ kind: "idle", scope, bank: b.name, amount: b.checking }));
   idle(mine, "mine");
   for (const j of joint) idle(j.holdings, "joint");
-  for (const r of mat.rows.filter((r) => r.days >= 0 && r.days <= soonDays)) out.push({ kind: "maturity", issuer: r.issuer, n: r.n, due: r.due, days: r.days, amount: r.balance, brb: r.tag === "brb", cdbMin });
+  for (const r of mat.rows.filter((r) => r.days >= 0 && r.days <= soonDays)) out.push({ kind: "maturity", issuer: r.issuer, n: r.n, due: r.due, days: r.days, amount: r.balance, brb: r.tag === "brb", cdbMin, scope: r.joint ? "joint" : "mine" });
   for (const c of cards.filter((c) => c.due && c.bill > 0)) {
     const d = daysBetween(today, c.due);
     if (d >= 0 && d <= billDays) out.push({ kind: "bill", bank: c.name, due: c.due, days: d, amount: c.bill });

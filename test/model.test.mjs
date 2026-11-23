@@ -102,7 +102,7 @@ test("alerts: bill soon, maturity soon, idle cash; ranked", async () => {
     cards: [{ name: "Card", due: "2026-11-26", bill: 500 }, { name: "Late", due: "2026-12-20", bill: 10 }],
   };
   const a = alerts(v, { idleCash: 5000 });
-  assert.deepEqual(a.map((x) => [x.kind, x.bank || x.issuer, x.scope || ""]), [["bill", "Card", ""], ["maturity", "Alfa", ""], ["idle", "J", "joint"], ["idle", "B", "mine"]]);
+  assert.deepEqual(a.map((x) => [x.kind, x.bank || x.issuer, x.scope || ""]), [["bill", "Card", ""], ["maturity", "Alfa", "mine"], ["idle", "J", "joint"], ["idle", "B", "mine"]]);
 });
 
 test("installmentsAhead: months after the open bill, grouped by plan", async () => {
@@ -123,4 +123,17 @@ test("maturities: Nubank's self-renewing daily-liquidity positions stay out of t
   const m = maturities({ banks: [bank("nubank", "Nubank", "2027-01-01", 100), bank("other", "Acme", "2027-02-01", 50)] }, "2026-11-23");
   assert.deepEqual(m.rows.map((r) => [r.bank, r.due]), [["other", "2027-02-01"]]);
   assert.equal(m.total, 50);
+});
+
+test("mergeLadders: joint rows flagged and sorted in, totals kept apart, BRB = latest of both", async () => {
+  const { mergeLadders } = await import("../src/lib/model.js");
+  const own = { rows: [{ due: "2027-02-01", balance: 50 }], liquid: [], conc: [], brbLast: "2027-01-01", total: 50 };
+  const joint = { rows: [{ due: "2027-01-15", balance: 80 }, { due: "2028-01-01", balance: 20 }], liquid: [{ balance: 5 }], conc: [{ issuer: "X", share: 0.6 }], brbLast: null, total: 100 };
+  const m = mergeLadders(own, [joint]);
+  assert.deepEqual(m.rows.map((r) => [r.due, r.joint ?? false]), [["2027-01-15", true], ["2027-02-01", false], ["2028-01-01", true]]);
+  assert.equal(m.total, 50);
+  assert.equal(m.jointTotal, 100);
+  assert.equal(m.brbLast, "2027-01-01");
+  assert.equal(m.conc[0].joint, true);
+  assert.equal(m.liquid[0].joint, true);
 });

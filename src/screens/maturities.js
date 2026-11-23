@@ -13,10 +13,11 @@ export function render(el, ctx) {
   const s = ctx.data.settings || {};
   const cdi = (s.cdi ?? 13.65) / 100;
   const cdbMin = s.cdbMin ?? 110;
-  const banks = [...new Set(mat.rows.map((r) => bankName(r.bank)))].join(" + ");
+  const banks = (joint) => [...new Set(mat.rows.filter((r) => Boolean(r.joint) === joint).map((r) => bankName(r.bank)))].join(" + ");
+  const sub = [mat.total ? `${banks(false)} · ${mil(mat.total)}` : "", mat.jointTotal ? `${banks(true)} (conjunta) · ${mil(mat.jointTotal)}` : ""].filter(Boolean).join(" · ");
 
   el.innerHTML = `${header(ctx, "Vencimentos")}
-    <div class="sub mb10">${esc(banks)} · ${mil(mat.total)}</div>
+    <div class="sub mb10">${esc(sub)}</div>
     <div class="seg">${[["90", "90 dias"], ["365", "12 meses"], ["all", "Todos"]].map(([f, l]) => `<button data-f="${f}" class="${f === filter ? "on" : ""}">${l}</button>`).join("")}</div>
     <div class="card" data-list></div>
     <div class="card">
@@ -24,7 +25,7 @@ export function render(el, ctx) {
       <div class="rule"><i class="r-ok">1</i><span><b>Liquidez primeiro</b> — dinheiro novo curto (≤ 12 meses) ou liquidez diária: entrada do financiamento.</span></div>
       <div class="rule"><i class="r-ok">2</i><span><b>CDB ≥ ${cdbMin}% CDI</b>, até R$ 250 mil por emissor (FGC).</span></div>
       ${mat.brbLast ? `<div class="rule"><i class="r-bad">✕</i><span><b>Sem BRB</b> — manter os atuais até ${ddmmyyyy(mat.brbLast)}.</span></div>` : ""}
-      ${mat.conc.map((c) => `<div class="rule"><i class="r-warn">!</i><span><b>${esc(c.issuer)} = ${pct(c.share * 100, 0)}</b> da ${esc(bankName(c.bank))} — novos aportes em outros emissores.</span></div>`).join("")}
+      ${mat.conc.map((c) => `<div class="rule"><i class="r-warn">!</i><span><b>${esc(c.issuer)} = ${pct(c.share * 100, 0)}</b> da ${esc(bankName(c.bank))}${c.joint ? " (conjunta)" : ""} — novos aportes em outros emissores.</span></div>`).join("")}
     </div>
     <div class="card">
       <div class="row"><div class="label">CDB × LCA</div><span class="muted">CDI ${pct(cdi * 100, 2)}</span></div>
@@ -42,9 +43,10 @@ export function render(el, ctx) {
   const list = el.querySelector("[data-list]");
   const paint = () => {
     const rows = mat.rows.filter((r) => r.days >= 0 && (filter === "all" || r.days <= +filter));
-    const liquid = mat.liquid.map((p) => `<div class="mat"><div class="date soon"><b>D+0</b><small>diária</small></div><div><b>${esc(p.bankName)} · Cofrinho</b><div class="muted">${esc(p.rate)}</div><div class="mt4"><span class="chip">liquidez diária</span></div></div><b>${brl(p.balance)}</b></div>`);
+    const liquid = mat.liquid.map((p) => `<div class="mat"><div class="date soon"><b>D+0</b><small>diária</small></div><div><b>${esc(p.bankName)} · Cofrinho${p.joint ? " · conjunta" : ""}</b><div class="muted">${esc(p.rate)}</div><div class="mt4"><span class="chip">liquidez diária</span></div></div><b>${brl(p.balance)}</b></div>`);
     list.innerHTML = rows.map((r) => {
-          const tag = r.tag === "brb" ? '<span class="chip bad">não renovar</span>' : r.tag === "conc" ? '<span class="chip warn">concentração</span>' : "";
+      const tag = (r.tag === "brb" ? '<span class="chip bad">não renovar</span>' : r.tag === "conc" ? '<span class="chip warn">concentração</span>' : "")
+        + (r.joint ? `<span class="chip joint">conjunta · ${esc(bankName(r.bank))}</span>` : "");
       return `<div class="mat"><div class="date${r.days <= 90 ? " soon" : ""}"><b>${Number(r.due.slice(8, 10))}</b><small>${MES[Number(r.due.slice(5, 7)) - 1]} ${r.due.slice(2, 4)}</small></div>
         <div><b>${esc(r.issuer)}${r.n > 1 ? ` ×${r.n}` : ""}</b><div class="muted">${esc(r.rates.length > 2 ? `${r.n} títulos` : r.rates.join(" / "))} · em ${r.days} dias</div>${tag ? `<div class="mt4">${tag}</div>` : ""}</div><b>${brl(r.balance)}</b></div>`;
     }).concat(liquid).join("") || '<div class="muted">Nada neste período.</div>';
