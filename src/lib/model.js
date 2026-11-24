@@ -26,7 +26,7 @@ export const CONCENTRATION = 0.4;
 // Keep only what the app reads: the vault stays small and holds no field the app never shows.
 const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
 const TX = ["id", "date", "amount", "description", "operationType", "category", "status"];
-const INV = ["id", "name", "issuer", "type", "subtype", "status", "balance", "amountOriginal", "rate", "rateType", "fixedAnnualRate", "dueDate", "purchaseDate", "issueDate", "taxes", "taxes2", "taxExempt"];
+const INV = ["id", "name", "issuer", "type", "subtype", "status", "balance", "amountOriginal", "rate", "rateType", "fixedAnnualRate", "dueDate", "purchaseDate", "issueDate", "taxes", "taxes2", "taxExempt", "quantity"];
 
 export function slim(pulled) {
   return {
@@ -261,6 +261,42 @@ export function openBill(account, due) {
 }
 
 // Installments already committed to bills after the open one, per month and per purchase plan.
+// The merchant part of a card line: no "n/N" installment tail, no " - NuPay" suffix.
+export const merchantOf = (desc) => String(desc || "").split("|").at(-1).replace(/\s*\d+\/\d+\s*$/, "").replace(/\s+-?\s*NuPay\s*$/i, "").trim();
+
+// Gastos › Faturas: the open bill and every later one, per month, with each line on it. The open month's amount is the
+// bill itself (charges − early payments, from cards()); later months are what is already committed (installments).
+// Only cards that tag each charge with its bill (Nubank) can be listed; the others show in the open bills only.
+export function billMonths(snapshot, rules, entity, today) {
+  const months = new Map();
+  const open = cards(snapshot, rules, entity, today);
+  for (const it of snapshot.items) {
+    if (it.error || entityOf(it.label, rules) !== entity) continue;
+    for (const a of it.accounts) {
+      if (a.type !== "CREDIT") continue;
+      const c = open.find((x) => x.bank === it.label && x.exact);
+      if (!c?.due) continue;
+      const first = c.due.slice(0, 7);
+      for (const t of a.transactions || []) {
+        const k = t.card, f = k?.billForecastDate?.slice(0, 7);
+        if (!f || f < first || t.operationType === "PAGAMENTO_FATURA") continue;
+        const m = months.get(f) || { month: f, open: f === first, amount: 0, charges: 0, rows: [] };
+        m.charges += t.amount;
+        m.rows.push({ bank: it.label, name: merchantOf(t.description), n: k.installmentNumber || null, of: k.totalInstallments || null, amount: t.amount, date: (k.purchaseDate || t.date || "").slice(0, 10) });
+        months.set(f, m);
+      }
+      const m0 = months.get(first);
+      if (m0) { m0.amount += c.bill; m0.early = (m0.early || 0) + (c.early || 0); m0.due = c.due; }
+    }
+  }
+  const list = [...months.values()].sort((x, y) => x.month.localeCompare(y.month));
+  for (const m of list) {
+    if (!m.open) m.amount = m.charges;
+    m.rows.sort((x, y) => y.amount - x.amount);
+  }
+  return list;
+}
+
 export function installmentsAhead(snapshot, rules, entity, today) {
   const months = {}, plans = new Map();
   for (const it of snapshot.items) {
@@ -276,7 +312,7 @@ export function installmentsAhead(snapshot, rules, entity, today) {
         const f = c.billForecastDate?.slice(0, 7);
         if (!f || f <= open) continue;
         months[f] = (months[f] || 0) + t.amount;
-        const name = t.description.split("|").at(-1).replace(/\s*\d+\/\d+\s*$/, "").replace(/\s+-?\s*NuPay\s*$/i, "").trim();
+        const name = merchantOf(t.description);
         const k = `${it.label}|${name.toLowerCase()}|${(c.purchaseDate || "").slice(0, 10)}|${c.totalInstallments}`;
         const p = plans.get(k) || { bank: it.label, name, total: c.totalInstallments, left: 0, amount: 0, per: t.amount, last: f };
         p.left++; p.amount += t.amount; if (f > p.last) p.last = f;

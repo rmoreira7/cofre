@@ -1,20 +1,20 @@
 import { createVault, idbStorage, validPin } from "./lib/vault.js";
 import { createBio } from "./lib/bio.js";
 import { createPluggy } from "./lib/pluggy.js";
-import { compileRules } from "./lib/categorize.js";
-import { spendRows, incomeRows, leftover, salaryForecast, monthView, byMonth, sum, monthRange, cardCycles, BANK_CODES, DEFAULT_TARGET, clusterTrends, suggestGoals } from "./lib/spend.js";
-import { slim, holdings, cards, timeline, maturities as maturityLadder, fgc, primaryEntity, bankName, alerts, shouldAutoRefresh, installmentsAhead } from "./lib/model.js";
-import { localToday, daysBetween } from "./lib/format.js";
-import { income as investIncome, logPositions } from "./lib/income.js";
+import { DEFAULT_TARGET } from "./lib/spend.js";
+import { slim, holdings, primaryEntity, bankName, shouldAutoRefresh } from "./lib/model.js";
+import { localToday } from "./lib/format.js";
+import { logPositions } from "./lib/income.js";
+import { buildView } from "./lib/view.js";
 import * as home from "./screens/home.js";
-import * as spend from "./screens/spend.js";
-import * as maturities from "./screens/maturities.js";
-import * as projection from "./screens/projection.js";
-import * as settings from "./screens/settings.js";
+import * as spend from "./screens/spend/index.js";
+import * as investments from "./screens/investments/index.js";
+import * as projection from "./screens/projection/index.js";
+import * as settings from "./screens/settings/index.js";
 
-export const APP_VERSION = "0.15.0";
+export const APP_VERSION = "0.16.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
-const SCREENS = { home, spend, maturities, projection, settings };
+const SCREENS = { home, spend, investments, projection, settings };
 
 const app = document.getElementById("app");
 const tabs = document.getElementById("tabs");
@@ -23,7 +23,11 @@ const bio = createBio(idbStorage("cofre", "vault", "bio"), {
   credentials: navigator.credentials, rpId: location.hostname,
   isAvailable: () => window.PublicKeyCredential?.isUserVerifyingPlatformAuthenticatorAvailable?.() ?? false,
 });
-const state = { data: null, current: "home", view: null, progress: "", busy: false, bio: { available: false, enrolled: false } };
+const state = { data: null, current: "home", view: null, progress: "", busy: false, bio: { available: false, enrolled: false }, sub: loadSubs() };
+
+// The last sub-tab of each tab: a per-device convenience, so it lives in localStorage (and works without it).
+function loadSubs() { try { return JSON.parse(localStorage.getItem("cofre.sub") || "{}"); } catch { return {}; } }
+function saveSubs() { try { localStorage.setItem("cofre.sub", JSON.stringify(state.sub)); } catch { /* private mode */ } }
 
 const ctx = {
   version: APP_VERSION,
@@ -41,54 +45,13 @@ const ctx = {
   lock,
   async wipe() { await bio.clear(); await vault.wipe(); location.reload(); },
   go,
+  // The open sub-tab of `tab`, or the first of `ids` when none was opened yet (or it no longer exists).
+  sub(tab, ids) { const s = state.sub[tab]; return ids.includes(s) ? s : ids[0]; },
   get bio() { return state.bio; },
   enrollBio,
   async disableBio() { await bio.clear(); state.bio.enrolled = false; go("settings"); },
 };
 
-// Everything the screens show, derived once per data change.
-export function buildView(data, today) {
-  const rules = data.rules;
-  const compiled = compileRules(rules, data.userOverrides || {});
-  const snap = data.snapshot;
-  const s = data.settings || {};
-  const me = primaryEntity(rules);
-  const cycles = s.monthMode === "calendar" ? null : cardCycles(snap, { rules, entity: me });
-  const rows = spendRows(snap, { rules, compiled, entity: me, today, cycles });
-  const mine = holdings(snap, rules, me);
-  const month = monthView(rows, { today, target: s.target ?? DEFAULT_TARGET, limits: s.limits || {}, cycles });
-  const m = byMonth(rows, "cluster", null, cycles ? "cyc" : "m");
-  const last12 = monthRange(month.history[0].month, month.history.at(-2).month);
-  const last3 = last12.slice(-3);
-  const avg3 = last3.reduce((a, k) => a + sum(m[k]), 0) / (last3.length || 1);
-  const avgN = last12.length;
-  const avg12 = last12.reduce((a, k) => a + sum(m[k]), 0) / (avgN || 1);
-  const income = incomeRows(snap, { rules, compiled, entity: me, today, cycles });
-  const key = cycles ? "cyc" : "m";
-  // Months with income data only: before Pluggy's first month there is none (the bill history has spending only).
-  const firstIncome = income.reduce((a, r) => (r[key] && r[key] < a ? r[key] : a), "9999");
-  const pastLeft = leftover(income, rows, last12.filter((k) => k > firstIncome), key);
-  const avg = (f) => pastLeft.reduce((a, r) => a + r[f], 0) / (pastLeft.length || 1);
-  const salaryFrom = [...new Set(income.filter((r) => r.kind === "salary").map((r) => BANK_CODES[r.from] || `banco ${r.from}`))];
-  const left = { now: leftover(income, rows, [month.month], key)[0], n: pastLeft.length, avg: { left: avg("regular"), salary: avg("salary"), other: avg("other"), spent: avg("spent"), oneOff: pastLeft.reduce((a, r) => a + r.oneOff, 0) }, history: pastLeft, salaryFrom };
-  const trends = clusterTrends(m, last12);
-  const goals = suggestGoals({ income: pastLeft.length ? left.avg.left + left.avg.spent : 0, trends });
-  // Wealth, maturities and the FGC check cover every connected account, the joint one (Itaú) included. Spending,
-  // income and Projeção stay on the owner's accounts: the joint account's flows are the household's, not his.
-  const wealth = holdings(snap, rules, null);
-  const v = {
-    today, rows, mine, wealth, month, avg12, avgN, avg3, left, trends, goals,
-    cards: cards(snap, rules, me, today),
-    mat: maturityLadder(wealth, today),
-    guarantee: fgc(wealth),
-    income: investIncome(snap, rules, snap.cdi?.daily ?? null),
-    daysTo: (iso) => daysBetween(today, iso),
-  };
-  v.installments = installmentsAhead(snap, rules, me, today);
-  v.alerts = alerts(v, { idleCash: s.idleCash ?? 5000, cdbMin: s.cdbMin ?? 110 });
-  v.timeline = timeline({ cards: v.cards, mat: v.mat, salary: salaryForecast(income, { today }), today });
-  return v;
-}
 
 // BRL rates for the foreign-currency balances (Wise). Only currency codes leave the device. On failure the previous
 // rates stay (marked with their own date); with none, those balances count as 0 until a rate is fetched.
@@ -162,7 +125,8 @@ async function refresh() {
   go(state.current);
 }
 
-function go(name) {
+function go(name, sub) {
+  if (sub) { state.sub[name] = sub; saveSubs(); }
   state.current = name;
   tabs.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.s === name));
   app.innerHTML = "";
@@ -309,6 +273,21 @@ document.addEventListener("visibilitychange", () => {
   else if (vault.unlocked && hiddenAt && Date.now() - hiddenAt > AUTO_LOCK_MS) lock();
   else if (vault.unlocked) maybeRefresh();
 });
+// Sub-tabs switch in place (every pane is already rendered, only one shown); a [data-go="tab:sub"] link opens another tab.
+app.addEventListener("click", (e) => {
+  const st = e.target.closest("[data-sub]");
+  if (st) {
+    const sec = st.closest("section"), id = st.dataset.sub;
+    state.sub[state.current] = id; saveSubs();
+    sec.querySelectorAll("[data-sub]").forEach((b) => { b.classList.toggle("on", b.dataset.sub === id); b.setAttribute("aria-selected", b.dataset.sub === id); });
+    sec.querySelectorAll("[data-pane]").forEach((p) => { p.hidden = p.dataset.pane !== id; });
+    window.scrollTo(0, 0);
+    return;
+  }
+  const g = e.target.closest("[data-go]")?.dataset.go;
+  if (g) { const [tab, sub] = g.split(":"); go(tab, sub); }
+});
+
 tabs.addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (b) go(b.dataset.s);

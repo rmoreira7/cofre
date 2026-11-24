@@ -64,8 +64,8 @@ test("the position log keeps one entry per day, drops old days and failed banks"
   let log = logPositions([], snap, "2026-11-24");
   log = logPositions(log, snap, "2026-11-24");
   assert.equal(log.length, 1);
-  assert.deepEqual(log[0].p, { p1: [850.12, 800] });
-  log = logPositions([{ d: "2025-01-01", p: {} }, ...log], snap, "2026-11-25");
+  assert.deepEqual(log[0].p, { p1: [850.12, 800, null, "bank_a"] });
+  log = logPositions([{ v: 2, d: "2025-01-01", p: {} }, { d: "2026-11-20", p: {} }, ...log], snap, "2026-11-25");
   assert.deepEqual(log.map((e) => e.d), ["2026-11-24", "2026-11-25"]);
   assert.deepEqual(logPositions([], { items: [] }, "2026-11-25"), []);
 });
@@ -73,4 +73,57 @@ test("the position log keeps one entry per day, drops old days and failed banks"
 test("without today's CDI, CDI positions are not reported as unpriced", () => {
   const x = income({ items: [{ label: "bank_a", accounts: [], investments: [cdb({ balance: 850 }), { id: "f", subtype: "FIXED_INCOME_FUND", balance: 100 }] }] }, rules, null);
   assert.equal(x.own.unrated, 1);
+});
+
+import { earned, earnedSteps } from "../src/lib/income.js";
+
+test("earned: held → balance change; a partial withdrawal is scaled out, not a loss; new → balance − cost", () => {
+  assert.equal(earned([100, 90, 10], [101, 90, 10]), 1);
+  near(earned([100, 90, 10], [50.6, 45, 5]), 0.6);
+  assert.equal(earned(undefined, [105, 100, 1]), 5);
+  assert.equal(earned(undefined, [105, 0, 1]), 0);
+  assert.equal(earned([100, 90, null], [101, 90, null]), 1);
+  assert.equal(earned([100, 90, 1], undefined), 0);
+});
+
+test("earnedSteps sums per bank between entries; unknown positions are skipped", () => {
+  const log = [{ d: "a", p: { x: [100, 90, 10], y: [10, 10, 1] } }, { d: "b", p: { x: [50.6, 45, 5], y: [10.1, 10, 1], z: [20, 20, 1], q: [5, 1, 1] } }];
+  const st = earnedSteps(log, (id) => ({ x: "bank_a", y: "bank_a", z: "bank_b" })[id]);
+  assert.equal(st.length, 1);
+  near(st[0].banks.bank_a, 0.7);
+  assert.equal(st[0].banks.bank_b, 0);
+});
+
+import { businessDays, mergeLog, monthlyHistory } from "../src/lib/income.js";
+
+test("business days skip weekends and national holidays", () => {
+  assert.equal(businessDays("2026-11-06", "2026-11-24"), 11); // 15/11 is a Sunday; 20/11 (Consciência Negra) a holiday
+  assert.equal(businessDays("2026-11-23", "2026-11-23"), 0);
+  assert.equal(businessDays("2026-12-24", "2026-12-28"), 1); // 25 holiday, 26–27 weekend
+});
+
+test("mergeLog: one entry per day, the app's own entry wins, old-format entries dropped", () => {
+  const seed = [{ v: 2, d: "2026-11-06", p: { a: [1, 1, 1, "x"] } }, { v: 2, d: "2026-11-10", p: { a: [2, 1, 1, "x"] } }];
+  const own = [{ v: 2, d: "2026-11-10", p: { a: [3, 1, 1, "x"] } }, { d: "2026-11-11", p: {} }];
+  const m = mergeLog(seed, own);
+  assert.deepEqual(m.map((e) => e.d), ["2026-11-06", "2026-11-10"]);
+  assert.equal(m[1].p.a[0], 3);
+});
+
+test("monthlyHistory: steps grouped by the month they end in, estimate for the same business days", () => {
+  const log = [
+    { v: 2, d: "2026-11-06", p: { a: [1000, 900, 10, "x"], j: [500, 500, 1, "y"] } },
+    { v: 2, d: "2026-11-24", p: { a: [1010, 900, 10, "x"], j: [502, 500, 1, "y"], k: [5000, 5000, 1, "y"] } },
+    { v: 2, d: "2026-12-01", p: { a: [1013, 900, 10, "x"], j: [503, 500, 1, "y"], k: [5010, 5000, 1, "y"] } },
+  ];
+  const h = monthlyHistory(log, { x: 21, y: 42 });
+  assert.deepEqual(h.map((m) => m.month), ["2026-11", "2026-12"]);
+  assert.equal(h[0].partial, true);
+  assert.equal(h[1].partial, false);
+  assert.equal(h[0].bd, 11);
+  assert.equal(h[0].banks.x.measured, 10);
+  assert.equal(h[0].banks.x.estimated, 11); // 21/month × 11 of 21 business days
+  assert.equal(h[0].banks.y.estimated, null); // most of y's money at the end was bought mid-period
+  assert.equal(h[1].banks.y.measured, 11);
+  assert.notEqual(h[1].banks.y.estimated, null);
 });

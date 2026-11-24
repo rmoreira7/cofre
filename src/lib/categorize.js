@@ -98,6 +98,11 @@ export function parseRulesFile(text) {
     const ok = Array.isArray(raw.wealth) && raw.wealth.every((w) => /^\d{4}-\d{2}-\d{2}$/.test(w?.d) && w.banks && typeof w.banks === "object" && Object.values(w.banks).every(Number.isFinite));
     if (!ok) throw new Error("Histórico de patrimônio inválido.");
   }
+  if (raw.invHistory != null) {
+    const ok = Array.isArray(raw.invHistory) && raw.invHistory.every((e) => e?.v === 2 && /^\d{4}-\d{2}-\d{2}$/.test(e.d) && e.p && typeof e.p === "object"
+      && Object.values(e.p).every((x) => Array.isArray(x) && Number.isFinite(x[0]) && Number.isFinite(x[1]) && typeof x[3] === "string"));
+    if (!ok) throw new Error("Histórico de investimentos inválido.");
+  }
   if (raw.history != null) {
     const h = raw.history, ym = /^\d{4}-\d{2}$/, ymd = /^\d{4}-\d{2}-\d{2}$/;
     const ok = h && typeof h.bank === "string" && ym.test(h.until) && Array.isArray(h.rows)

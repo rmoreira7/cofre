@@ -29,3 +29,28 @@ With `OPENAI_API_KEY` set, each maturity message gets a one- or two-sentence exp
 Responses API, `store: false`). OpenAI receives only that decision's facts as the rules computed them (issuer,
 amount, date, suggested split, ladder shares, CDI cost per business day), and every number in its reply must appear
 verbatim in those facts or the reply is dropped.
+
+## Architecture
+
+```
+src/
+  lib/        pure domain logic, no DOM: Pluggy client, vault, categorize, spend, model, income, ladder, projection…
+    view.js   the view: everything the screens show, derived from the vault's data once per change
+  ui/         chrome shared by every screen
+    shell.js  title bar, empty state, download helper
+    tabbed.js tabbedScreen(): a tab = header + sub-tab pills + one pane per sub-tab
+  screens/
+    home.js   Início: a summary whose rows open the sub-tab where each thing is dealt with
+    <tab>/index.js       the tab: its sub-tabs, and the context they share (built once per render)
+    <tab>/<sub-tab>.js   one sub-tab: id, label, render(t, ctx) → HTML, optional bind(pane, t, ctx, { repaint, rerender })
+  main.js     vault, refresh, routing (tab + sub-tab, remembered per device), auto-lock
+```
+
+- **Tabs:** Gastos (Ciclo · Grupos · Faturas · Histórico) · Investimentos (Carteira · Rendimentos · Vencimentos · Regras) ·
+  Projeção (Cenários · Real × plano · Premissas) · Ajustes (Conexões · Metas · Segurança · App).
+- A sub-tab owns its pane: `repaint()` redraws only it (UI state changed), `rerender()` the whole tab (data changed). A
+  sub-tab that throws shows an error in its own pane and the others still work.
+- Links between tabs are `data-go="tab:sub"`; pills are `data-sub="id"`. Both are handled once, in `main.js`.
+- Adding a module: `node scripts/update-shell.mjs` refreshes the service worker's cache list (a test fails until you do).
+- Tests: `npm test`. Besides the `lib` tests, every sub-tab is rendered against a fictional snapshot, and a static check
+  fails when a screen module calls a function it never imports.

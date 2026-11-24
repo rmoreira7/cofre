@@ -169,3 +169,26 @@ test("timeline: bills, maturities and forecast salary in the next 30 days, by da
   assert.equal(t[0].early, 20);
   assert.equal(t[1].forecast, true);
 });
+
+import { billMonths, merchantOf } from "../src/lib/model.js";
+
+test("merchantOf drops the n/N tail and the NuPay suffix", () => {
+  assert.equal(merchantOf("Loja A 2/6"), "Loja A");
+  assert.equal(merchantOf("x|Loja B - NuPay"), "Loja B");
+});
+
+test("billMonths: the open bill (charges − early payment) first, then the installments ahead, with their lines", () => {
+  const card = (f, amount, extra = {}) => ({ id: f + amount, date: "2026-11-10", amount, description: extra.d || "Loja A", operationType: extra.op, card: { billForecastDate: `${f}-03`, paymentType: extra.n ? "INSTALLMENT" : "SINGLE", installmentNumber: extra.n, totalInstallments: extra.of, purchaseDate: "2026-11-07" } });
+  const snap = { items: [{ label: "bank_a", accounts: [{ type: "CREDIT", balance: 900, credit: { balanceDueDate: "2026-12-03", creditLimit: 5000 }, bills: [{ dueDate: "2026-11-03", totalAmount: 100 }],
+    transactions: [card("2026-12", 300), card("2026-12", 200, { n: 1, of: 3, d: "Loja B 1/3" }), card("2026-12", -150, { op: "PAGAMENTO_FATURA" }), card("2027-01", 200, { n: 2, of: 3, d: "Loja B 2/3" }), card("2027-02", 200, { n: 3, of: 3, d: "Loja B 3/3" }), card("2026-11", 99)] }] }] };
+  const rules = { entities: { me: { banks: ["bank_a"] } } };
+  const m = billMonths(snap, rules, "me", "2026-11-24");
+  assert.deepEqual(m.map((x) => x.month), ["2026-12", "2027-01", "2027-02"]);
+  assert.equal(m[0].open, true);
+  assert.equal(m[0].charges, 500);
+  assert.equal(m[0].early, 50); // paid 150 this month, 100 of it was the previous bill
+  assert.equal(m[0].amount, 450);
+  assert.equal(m[0].rows.length, 2); // the payment is not a line
+  assert.deepEqual(m[1].rows.map((r) => [r.name, r.n, r.of]), [["Loja B", 2, 3]]);
+  assert.equal(m[2].amount, 200);
+});

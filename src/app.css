@@ -228,3 +228,39 @@ small.block{display:block;font-weight:400}
 .legend-2 .bankdot{margin-right:0}
 .eq{margin-top:10px;padding:9px 11px;border-radius:11px;background:var(--brand-soft);font-size:12.5px;color:var(--ink)}
 .nw{white-space:nowrap}
+/* Sub-tabs: pills under the title, kept in view while scrolling */
+.sub-tabs{position:sticky;top:0;z-index:5;display:flex;gap:6px;overflow-x:auto;margin:0 -16px 10px;padding:6px 16px 8px;background:var(--bg);scrollbar-width:none}
+.sub-tabs::-webkit-scrollbar{display:none}
+.sub-tabs button{flex:none;font:inherit;font-size:13px;font-weight:650;padding:7px 13px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer}
+.sub-tabs button.on{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+[data-pane][hidden]{display:none}
+/* Início: summary rows that open a sub-tab */
+button.card.sum-card{display:block;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.go{color:var(--ink-3);font-size:22px;line-height:1}
+.to{margin-top:6px;font-size:11.5px;font-weight:650;color:var(--brand)}
+.alert-card .tap{cursor:pointer}
+/* Carteira: bank tiles open their positions */
+button.tile.tap{border:1px solid transparent;font:inherit;color:inherit;text-align:left;cursor:pointer;width:100%}
+button.tile.tap.on{border-color:var(--brand)}
+/* Faturas: one bar per bill */
+.bill-bars{display:flex;align-items:flex-end;gap:6px;height:112px;margin-top:10px}
+.bill-bars button{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;height:100%;border:0;background:none;padding:0;font:inherit;font-size:10.5px;color:var(--ink-3);cursor:pointer}
+.bill-bars b{font-size:10px;font-weight:600;color:var(--ink-2)}
+.bill-bars i{display:block;width:100%;border-radius:5px;background:var(--c-shop);opacity:.5}
+.bill-bars button.open i{background:var(--brand)}
+.bill-bars button.sel i{opacity:1;outline:2px solid var(--ink);outline-offset:2px}
+.bill-bars button.sel{color:var(--ink);font-weight:700}
+.pl{display:inline-block;font-size:11px;font-weight:650;color:var(--ink-2);background:var(--surface-2);border-radius:6px;padding:1px 6px}
+/* Rendimentos: measured vs estimated per month */
+.hist-bars{display:flex;align-items:flex-end;gap:14px;height:112px;margin-top:12px;padding:0 4px}
+.hist-bars>div{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10.5px;color:var(--ink-3)}
+.hist-bars .pair{display:flex;align-items:flex-end;gap:4px;height:92px}
+.hist-bars i{display:block;width:22px;border-radius:5px}
+.hist-bars i.me{background:var(--brand)}.hist-bars i.es{background:var(--ink-3);opacity:.4}
+.hist{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+.hist th{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;text-align:right;font-weight:650;padding:4px 0}
+.hist th:first-child,.hist td:first-child{text-align:left}
+.hist td{border-top:1px solid var(--line);padding:8px 0;text-align:right}
+.hist td.dim{color:var(--ink-3)}
+.hist .bankdot{margin-right:6px}
+.lnk svg{width:15px;height:15px;vertical-align:-3px}
