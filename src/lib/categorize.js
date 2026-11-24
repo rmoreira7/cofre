@@ -103,7 +103,7 @@ export function parseRulesFile(text) {
   if (raw.renewals != null && !validRenewals(raw.renewals)) throw new Error("Lista de renovações inválida.");
   if (raw.sync != null) {
     const s = raw.sync;
-    const ok = s && validKey(s.key) && /^[\w.-]+\/[\w.-]+$/.test(s.repo || "") && (s.gist == null || (/^[0-9a-f]{20,40}$/.test(s.gist) && /^github_pat_\w+$/.test(s.token || "")));
+    const ok = s && validKey(s.key) && /^[\w.-]+\/[\w.-]+$/.test(s.repo || "") && (s.gist == null || (/^[0-9a-f]{20,40}$/.test(s.gist) && /^(github_pat_|ghp_)\w+$/.test(s.token || "")));
     if (!ok) throw new Error("Configuração de sincronização inválida.");
   }
   if (raw.invHistory != null) {

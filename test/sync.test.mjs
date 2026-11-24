@@ -49,6 +49,7 @@ test("rules file: sync config is validated", () => {
   assert.equal(parseRulesFile(rules({ key, repo: "o/r" })).sync.repo, "o/r");
   assert.ok(parseRulesFile(rules({ key, repo: "o/r", gist: "a".repeat(32), token: "github_pat_X1" })).sync.gist);
   assert.throws(() => parseRulesFile(rules({ key: "short", repo: "o/r" })));
+  assert.ok(parseRulesFile(rules({ key, repo: "o/r", gist: "b".repeat(32), token: "ghp_X1" })).sync.token);
   assert.throws(() => parseRulesFile(rules({ key, repo: "o/r", gist: "a".repeat(32) })));
 });
 
