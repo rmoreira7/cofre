@@ -2,7 +2,7 @@
 // Stateless by design: a maturity speaks at D-7/3/1/0 and a bill at D-3/1, so a daily run never repeats itself and
 // needs nothing stored. Standing conditions (idle cash, FGC, broken banks) go in the Monday digest only.
 import { holdings, cards, maturities, fgc, primaryEntity, alerts, itemStatus } from "../src/lib/model.js";
-import { ladder } from "../src/lib/ladder.js";
+import { ladder, RUNGS } from "../src/lib/ladder.js";
 import { brl, daysBetween } from "../src/lib/format.js";
 
 export const MATURITY_DAYS = [7, 3, 1, 0];
@@ -59,20 +59,22 @@ export function decide(v, { today, monday = new Date(today + "T12:00:00Z").getUT
 const pct = (x) => `${(x * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 const money = (n) => brl(n, Math.abs(n) < 100 ? 2 : 0);
 
+// The rung a purchase of `months` lands in today (same edges as ladder.js RUNGS).
+const RUNG_OF = (months) => RUNGS.findIndex((r) => months <= r.max);
+
 export function maturityFacts(a, p, lad, cdiDaily) {
+  const target = 1 / lad.now.length;
+  const list = (rows) => rows.map((r) => `${r.label} (${pct(r.share)})`).join(", ");
+  const buys = (p?.buys || []).map((b) => `${brl(b.amount)} em ${term(b.months)}, na faixa ${lad.now[RUNG_OF(b.months)]?.label}`);
   return {
-    emissor: a.issuer,
-    valor: brl(a.amount),
-    vencimento: ddmm(a.due),
-    dias_ate_vencer: String(a.days),
-    conta: a.scope === "joint" ? "conjunta" : "própria",
-    regra_brb_nao_renovar: Boolean(a.brb),
-    minimo_cdi_para_cdb: `${a.cdbMin}% CDI`,
-    sugestao_partes: String(p?.buys.length || 0),
-    sugestao: (p?.buys || []).map((b) => ({ valor: brl(b.amount), prazo: term(b.months) })),
-    escada_hoje: lad.now.map((r) => ({ faixa: r.label, participacao: pct(r.share) })),
-    alvo_por_faixa: pct(1 / lad.now.length),
-    custo_por_dia_util_sem_aplicar: cdiDaily ? money((a.amount * cdiDaily) / 100) : null,
+    "vence": `${a.issuer}, ${brl(a.amount)}, em ${ddmm(a.due)}${a.scope === "joint" ? " (conta conjunta)" : ""}`,
+    // The comparisons are done here, not by the model: given the shares and the target, a model gets above/below wrong.
+    "faixas abaixo do alvo": list(lad.now.filter((r) => r.share < target)),
+    "faixas acima do alvo": list(lad.now.filter((r) => r.share > target)),
+    "alvo por faixa": pct(target),
+    "compra sugerida": buys.join(" · "),
+    ...(cdiDaily && { "custo de cada dia útil sem aplicar": money((a.amount * cdiDaily) / 100) }),
+    ...(a.brb && { "observação": "o valor não volta para o BRB" }),
   };
 }
 

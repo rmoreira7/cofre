@@ -27,8 +27,9 @@ Actions secrets, and the logs carry counts only.
 
 With `OPENAI_API_KEY` set, each maturity message gets a one- or two-sentence explanation (`watch/explain.mjs`,
 Responses API, `store: false`). OpenAI receives only that decision's facts as the rules computed them (issuer,
-amount, date, suggested split, ladder shares, CDI cost per business day), and every number in its reply must appear
-verbatim in those facts or the reply is dropped.
+amount, date, suggested split, which ladder rungs are below and above the target, CDI cost per business day). The
+model compares nothing itself (given the shares and the target it got above/below wrong in testing); every number in
+its reply must appear verbatim in those facts, and a reply that does not, or that leaks a field name, is dropped.
 
 ## Architecture
 

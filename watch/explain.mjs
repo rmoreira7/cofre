@@ -2,16 +2,16 @@
 // The model never computes: every number in its reply must appear literally in the facts, or the reply is dropped and
 // the message goes out without it. Any failure (no key, HTTP error, timeout, budget) returns null and never blocks.
 
-export const MODEL = "gpt-5-mini";
+export const MODEL = "gpt-5.4-mini";
 export const MAX_CHARS = 320;
 
-const INSTRUCTIONS = `Você explica, em português do Brasil, uma decisão financeira pessoal que já foi calculada por regras.
-Escreva no máximo 2 frases curtas (até 280 caracteres), em tom direto, sem saudação.
-Explique por que a sugestão faz sentido (quais faixas da escada estão abaixo ou acima do alvo) e, se houver,
-quanto custa cada dia útil sem aplicar o dinheiro.
-Regras: use SOMENTE números que aparecem nos fatos, copiados exatamente como estão escritos (mesmo formato).
-Não faça contas, não arredonde, não invente taxas, emissores ou produtos. Se regra_brb_nao_renovar for true, diga que
-o valor não volta para o BRB.`;
+const INSTRUCTIONS = `Você explica, em português do Brasil, uma decisão financeira pessoal já calculada por regras.
+Escreva 1 ou 2 frases curtas (até 260 caracteres), em tom direto, sem saudação e sem quebras de linha.
+Diga por que a compra sugerida faz sentido: ela vai para uma das faixas abaixo do alvo. Se houver o custo de cada dia
+útil sem aplicar, termine com ele. Se houver observação, inclua-a.
+Exemplo de forma: "Os 2 anos caem em 18–24m, uma das faixas abaixo do alvo de 16,7% (hoje 8,1%). Cada dia útil sem aplicar custa R$ 1,04."
+Regras: use só o que está nos fatos, com os números escritos exatamente como lá. Não compare nem calcule nada.
+O emissor que vence não é uma recomendação de compra; não repita regras nem o nome dele.`;
 
 const NUM = /\d+(?:[.,/]\d+)*/g;
 const tokens = (s) => new Set(String(s).match(NUM) || []);
@@ -47,9 +47,10 @@ export async function explain(facts, { apiKey, model = MODEL, reasoning = "low",
     });
     if (!res.ok) return { text: null, reason: `http ${res.status}` };
     const body = await res.json();
-    const text = outputText(body);
+    const text = outputText(body)?.replace(/\s+/g, " ").trim() || null;
     if (!text) return { text: null, reason: `empty (${body.status || "?"})` };
     if (text.length > MAX_CHARS) return { text: null, reason: "too long" };
+    if (/[_{}[\]]/.test(text)) return { text: null, reason: "field names" };
     const g = guard(text, facts);
     if (!g.ok) return { text: null, reason: `unknown numbers: ${g.bad.length}` };
     return { text, reason: "ok", usage: body.usage };

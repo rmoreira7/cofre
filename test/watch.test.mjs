@@ -90,3 +90,16 @@ test("message shows the explanation under its decision, escaped", () => {
   const text = message({ urgent: [{ text: "💰 X", why: "a < b" }], weekly: [], monday: false }, "2026-12-01");
   assert.match(text, /💬 <i>a &lt; b<\/i>/);
 });
+
+import { maturityFacts } from "../watch/decide.mjs";
+
+test("maturity facts carry the rules' own below/above split, so the model never compares", () => {
+  const lad = { now: [{ label: "≤6m", share: 0.3 }, { label: "6–12m", share: 0.1 }, { label: "12–18m", share: 0.2 }, { label: "18–24m", share: 0.05 }, { label: "24–36m", share: 0.15 }, { label: "36m+", share: 0.2 }] };
+  const f = maturityFacts({ issuer: "Emissor A", amount: 70, due: "2026-12-08", days: 7, cdbMin: 110, scope: "mine" }, { buys: [{ months: 24, amount: 70 }] }, lad, 0.05);
+  assert.equal(f["faixas abaixo do alvo"], "6–12m (10,0%), 18–24m (5,0%), 24–36m (15,0%)");
+  assert.equal(f["faixas acima do alvo"], "≤6m (30,0%), 12–18m (20,0%), 36m+ (20,0%)");
+  assert.equal(f["compra sugerida"], "R$ 70 em 2 anos, na faixa 18–24m");
+  assert.equal(f["custo de cada dia útil sem aplicar"], "R$ 0,04");
+  assert.equal(f["observação"], undefined);
+  assert.equal(maturityFacts({ issuer: "BRB", amount: 70, due: "2026-12-08", brb: true, cdbMin: 110 }, null, lad, null)["observação"], "o valor não volta para o BRB");
+});
