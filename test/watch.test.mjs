@@ -17,9 +17,9 @@ test("a maturity speaks only on D-7/3/1/0", () => {
 test("the maturity carries the ladder's split and the BRB rule", () => {
   const due = "2026-12-01";
   const d = decide(base([{ kind: "maturity", issuer: "BRB", n: 1, due, days: 7, amount: 28000, brb: true, cdbMin: 110, scope: "joint" }], [mat(due, 28000, { issuer: "BRB", tag: "brb" }), mat("2028-06-01", 50000)]), { today });
-  assert.match(d.urgent[0], /BRB: não renovar/);
-  assert.match(d.urgent[0], /Sugestão da escada: /);
-  assert.match(d.urgent[0], /conta conjunta/);
+  assert.match(d.urgent[0].text, /BRB: não renovar/);
+  assert.match(d.urgent[0].text, /Sugestão da escada: /);
+  assert.match(d.urgent[0].text, /conta conjunta/);
 });
 
 test("bills speak on D-3 and D-1 only", () => {
@@ -49,5 +49,44 @@ test("Monday says so when nothing is pending, and flags broken banks and expirin
 
 test("names are HTML-escaped for Telegram", () => {
   const d = decide(base([{ kind: "bill", bank: "A&B <x>", due: "2026-11-27", days: 3, amount: 1 }]), { today });
-  assert.match(d.urgent[0], /A&amp;B &lt;x&gt;/);
+  assert.match(d.urgent[0].text, /A&amp;B &lt;x&gt;/);
+});
+
+import { guard, outputText, explain } from "../watch/explain.mjs";
+
+const facts = { valor: "R$ 280", vencimento: "01/12", sugestao: [{ valor: "R$ 70", prazo: "4 anos" }], alvo_por_faixa: "16,7%", custo_por_dia_util_sem_aplicar: "R$ 15" };
+
+test("guard: numbers copied verbatim pass, anything else fails", () => {
+  assert.equal(guard("Vence 01/12: R$ 280 em 4 anos, alvo 16,7%, custa R$ 15 por dia.", facts).ok, true);
+  assert.deepEqual(guard("Rende R$ 285 ou 0,05% ao dia.", facts).bad, ["285", "0,05"]);
+  assert.equal(guard("Sem números.", facts).ok, true);
+});
+
+const reply = (text, status = "completed") => ({ status, output: [{ type: "reasoning" }, { type: "message", content: [{ type: "output_text", text }] }], usage: { total_tokens: 300 } });
+const fakeFetch = (body, ok = true, seen = []) => async (url, init) => { seen.push({ url, init }); return { ok, status: ok ? 200 : 429, json: async () => body }; };
+
+test("outputText skips reasoning items and refuses an incomplete reply", () => {
+  assert.equal(outputText(reply("Oi.")), "Oi.");
+  assert.equal(outputText(reply("Oi.", "incomplete")), null);
+});
+
+test("explain sends store:false with the facts and keeps a guarded reply", async () => {
+  const seen = [];
+  const r = await explain(facts, { apiKey: "k", fetch: fakeFetch(reply("Divide R$ 280 em partes de R$ 70."), true, seen) });
+  assert.equal(r.text, "Divide R$ 280 em partes de R$ 70.");
+  const body = JSON.parse(seen[0].init.body);
+  assert.equal(body.store, false);
+  assert.match(body.input, /R\$ 280/);
+});
+
+test("explain drops a reply with an invented number, and never throws", async () => {
+  assert.equal((await explain(facts, { apiKey: "k", fetch: fakeFetch(reply("Rende R$ 310.")) })).text, null);
+  assert.equal((await explain(facts, { apiKey: "k", fetch: fakeFetch({}, false) })).reason, "http 429");
+  assert.equal((await explain(facts, { apiKey: "k", fetch: async () => { throw new Error("net"); } })).reason, "error");
+  assert.equal((await explain(facts, {})).reason, "skipped");
+});
+
+test("message shows the explanation under its decision, escaped", () => {
+  const text = message({ urgent: [{ text: "💰 X", why: "a < b" }], weekly: [], monday: false }, "2026-12-01");
+  assert.match(text, /💬 <i>a &lt; b<\/i>/);
 });
