@@ -8,6 +8,10 @@ on:
         description: "Send the weekly digest today"
         type: boolean
         default: false
+      today:
+        description: "Test as if today were YYYY-MM-DD (empty = today)"
+        type: string
+        default: ""
 permissions:
   contents: read
 concurrency: { group: watch, cancel-in-progress: false }
@@ -32,3 +36,4 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FORCE_DIGEST: ${{ inputs.digest && '1' || '' }}
+          TODAY: ${{ inputs.today }}
