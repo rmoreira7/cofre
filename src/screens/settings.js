@@ -122,7 +122,8 @@ export function render(el, ctx) {
     }
   });
 
-  el.addEventListener("click", async (e) => {
+  // onclick: Editar/Cancelar re-render this same element, and a stacked listener would run each action twice.
+  el.onclick = async (e) => {
     const a = e.target.closest("button")?.dataset.a;
     if (a === "lock") ctx.lock();
     if (a === "bio-on") ctx.enrollBio();
@@ -138,7 +139,7 @@ export function render(el, ctx) {
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     }
     if (a === "wipe" && confirm("Apagar PIN, credenciais e dados deste aparelho?")) await ctx.wipe();
-  });
+  };
   el.querySelector('[data-i="rules"]').addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;

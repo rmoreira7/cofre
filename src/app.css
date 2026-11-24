@@ -165,3 +165,21 @@ button.bar.tap{display:block;width:100%;border:0;background:none;color:inherit;f
 .mini{display:grid;grid-template-columns:repeat(var(--n),1fr);gap:4px;align-items:end;height:54px;margin-top:6px}
 .mini i{display:block;border-radius:3px 3px 0 0;min-height:2px}
 .mini.lbl{height:auto;align-items:start}.mini.lbl span{font-size:10.5px;color:var(--ink-3);text-align:center}
+/* Gastos v2: realistic target and group trends */
+.sm{font-size:12px}
+.mini-seg{margin:0;flex:none}.mini-seg button{padding:5px 10px;font-size:12px}
+.scale{position:relative;height:46px;margin:26px 4px 4px}
+.scale .ln{position:absolute;left:0;right:0;top:18px;height:6px;border-radius:4px;background:linear-gradient(90deg,var(--brand-soft),color-mix(in srgb,var(--bad) 22%,transparent))}
+.scale .m{position:absolute;top:8px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;font-size:10.5px;color:var(--ink-2);white-space:nowrap}
+.scale .m i{width:2px;height:26px;background:var(--ink-3);margin-bottom:3px}
+.scale .m.up{top:-14px;flex-direction:column-reverse}.scale .m.up i{margin:3px 0 0}
+.scale .m.sug{color:var(--brand);font-weight:700}.scale .m.sug i{background:var(--brand);width:3px}
+.scale .m.avg i{background:var(--bad)}.scale .m.inc i{background:var(--ok)}
+button.bar.g{padding:11px 0;margin:0;border-bottom:1px solid var(--line)}button.bar.g:last-of-type{border-bottom:0}
+.bar.g .t{margin-bottom:6px}
+.bar.g .t small{font-size:12px}
+.gm{display:grid;grid-template-columns:1fr 74px 58px;gap:8px;align-items:center}
+.sp{display:flex;align-items:flex-end;gap:2px;height:20px}.sp i{flex:1;border-radius:1.5px;background:var(--ink-3);opacity:.45}
+.trend{font-size:11.5px;font-weight:700;text-align:right;color:var(--ink-3)}.trend.ok{color:var(--ok)}.trend.bad{color:var(--bad)}
+.track .lim{position:absolute;top:0;bottom:0;width:2px;background:var(--ink)}
+.hint{margin-top:8px;padding:8px 10px;border-radius:10px;background:color-mix(in srgb,var(--warn) 12%,transparent);font-size:12.5px;color:var(--ink-2)}

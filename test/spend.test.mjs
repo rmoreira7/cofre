@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { compileRules } from "../src/lib/categorize.js";
-import { spendRows, byMonth, sum, monthView, monthRange, clusterOf, CLUSTERS, isInternal } from "../src/lib/spend.js";
+import { spendRows, byMonth, sum, monthView, monthRange, clusterOf, CLUSTERS, isInternal, clusterTrends, suggestGoals } from "../src/lib/spend.js";
 
 const rules = { format: "cofre-rules", v: 1, entities: { me: { banks: ["b1"] }, other: { banks: ["b2"] } }, entity_rules: {}, desc_rules: [], overrides: {}, learned: {} };
 const compiled = compileRules(rules);
@@ -147,4 +147,26 @@ test("salaryForecast: median day and amount per pay slot, skipping months alread
     { date: "2026-12-20", amount: 4723, from: "237" },
   ]);
   assert.deepEqual(salaryForecast(income.slice(0, 2), { today: "2026-11-23" }), []);
+});
+
+test("clusterTrends: per-group series over the given months, mean of all and of the last 3", () => {
+  const t = clusterTrends({ "2026-01": { food: 100 }, "2026-02": { food: 400, travel: 50 }, "2026-04": { food: 700 } }, ["2026-01", "2026-02", "2026-03", "2026-04"]);
+  assert.deepEqual(t.food.series, [100, 400, 0, 700]);
+  assert.equal(t.food.avg, 300);
+  assert.equal(t.food.avg3, 1100 / 3);
+  assert.equal(t.travel.avg, 12.5);
+  assert.equal(t.shop.avg, 0);
+});
+
+test("suggestGoals: 90% of income to the R$ 500, limits scaled from the averages and adding up to the target", () => {
+  const trends = Object.fromEntries(CLUSTERS.map((c) => [c.id, { avg: 0 }]));
+  Object.assign(trends, { travel: { avg: 5120 }, food: { avg: 2814 }, shop: { avg: 1363 }, pix: { avg: 1769 }, other: { avg: 999 } });
+  const g = suggestGoals({ income: 13583, trends });
+  assert.equal(g.target, 12000);
+  assert.equal(g.left, 1583);
+  assert.equal(Object.values(g.limits).reduce((a, b) => a + b, 0), 12000);
+  assert.ok(!("other" in g.limits), "Outros has no limit");
+  assert.equal(g.limits.shop, Math.round((1363 * 12000) / 11066 / 50) * 50);
+  assert.ok(g.limits.travel > g.limits.food);
+  assert.equal(suggestGoals({ income: 0, trends }), null);
 });
