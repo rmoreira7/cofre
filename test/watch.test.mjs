@@ -103,3 +103,12 @@ test("maturity facts carry the rules' own below/above split, so the model never 
   assert.equal(f["observação"], undefined);
   assert.equal(maturityFacts({ issuer: "BRB", amount: 70, due: "2026-12-08", brb: true, cdbMin: 110 }, null, lad, null)["observação"], "o valor não volta para o BRB");
 });
+
+test("renewals speak at D-30/7/1/0 with price and note; idle cash carries its cost per business day", () => {
+  const renewals = [{ name: "Plano X", date: "2026-12-24", amount: 25, every: "month", note: "cancelar antes se não quiser" }, { name: "Plano Y", date: "2026-12-10", amount: 100, every: "year" }];
+  const d = decide(base([]), { today, renewals });
+  assert.equal(d.urgent.length, 1);
+  assert.match(d.urgent[0].text, /Plano X<\/b> renova em 30 dias \(24\/12\) · R\$ 25,00\/mês\n   cancelar antes/);
+  const mon = decide(base([{ kind: "idle", bank: "Banco", amount: 2000, scope: "mine" }]), { today: "2026-11-23", cdiDaily: 0.05 });
+  assert.match(mon.weekly[0], /R\$ 2\.000 parado na conta · ~R\$ 1,00 por dia útil/);
+});

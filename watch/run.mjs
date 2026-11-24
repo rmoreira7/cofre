@@ -1,7 +1,8 @@
 // Daily run (.github/workflows/watch.yml): pull Pluggy, decide what is due, send it to Telegram. Logs carry counts only, never amounts or names.
 // env: PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET, PLUGGY_ITEMS ("label:id,…"), COFRE_ENTITIES (rules.entities JSON),
 //      TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, DRY_RUN=1 (print instead of send), FORCE_DIGEST=1 (treat today as Monday),
-//      OPENAI_API_KEY (optional: explanations), OPENAI_MODEL, TODAY=YYYY-MM-DD (test a future date).
+//      OPENAI_API_KEY (optional: explanations), OPENAI_MODEL, COFRE_RENEWALS (optional JSON list),
+//      TODAY=YYYY-MM-DD (test a future date).
 import { createPluggy } from "../src/lib/pluggy.js";
 import { slim } from "../src/lib/model.js";
 import { localToday } from "../src/lib/format.js";
@@ -51,6 +52,8 @@ const items = need("PLUGGY_ITEMS").split(",").filter((x) => x.trim()).map((x) =>
   return { label, id };
 });
 const rules = { entities: JSON.parse(need("COFRE_ENTITIES")) };
+// Optional: subscriptions and annual plans to warn about before they renew (a private secret, never in the repo).
+const renewals = process.env.COFRE_RENEWALS ? JSON.parse(process.env.COFRE_RENEWALS) : [];
 const pulled = await createPluggy({ clientId: need("PLUGGY_CLIENT_ID"), clientSecret: need("PLUGGY_CLIENT_SECRET") }).pullAll(items);
 const failed = pulled.items.filter((i) => i.error).length;
 console.log(`pluggy: ${items.length - failed}/${items.length} banks ok`);
@@ -59,7 +62,7 @@ if (failed === items.length) process.exit(1);
 const snap = slim(pulled);
 snap.fx = await fx(snap);
 const today = process.env.TODAY || localToday();
-const d = decide(view(snap, rules, today), { today, cdiDaily: await cdiDaily(), ...(process.env.FORCE_DIGEST === "1" && { monday: true }) });
+const d = decide(view(snap, rules, today), { today, cdiDaily: await cdiDaily(), renewals, ...(process.env.FORCE_DIGEST === "1" && { monday: true }) });
 let tokens = 0;
 for (const u of d.urgent.filter((u) => u.facts).slice(0, MAX_EXPLAIN)) {
   const r = await explain(u.facts, { apiKey: process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL || MODEL });

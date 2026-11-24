@@ -3,11 +3,13 @@
 // needs nothing stored. Standing conditions (idle cash, FGC, broken banks) go in the Monday digest only.
 import { holdings, cards, maturities, fgc, primaryEntity, alerts, itemStatus } from "../src/lib/model.js";
 import { ladder, RUNGS } from "../src/lib/ladder.js";
+import { upcomingRenewals, idleCost } from "../src/lib/decisions.js";
 import { brl, daysBetween } from "../src/lib/format.js";
 
 export const MATURITY_DAYS = [7, 3, 1, 0];
 export const BILL_DAYS = [3, 1];
 export const CONSENT_DAYS = 30;
+export const RENEWAL_DAYS = [30, 7, 1, 0];
 
 // The same view main.js builds for Atenção, minus spending (not needed to decide anything here).
 export function view(snapshot, rules, today, { idleCash = 5000, cdbMin = 110 } = {}) {
@@ -27,7 +29,7 @@ const joint = (x) => (x.joint || x.scope === "joint" ? " · conta conjunta" : ""
 
 // Each urgent item is { text, facts? }: facts are what the rules computed, already formatted, and the only numbers an
 // explanation (explain.mjs) is allowed to quote. cdiDaily = today's CDI in % per business day (BCB series 12), or null.
-export function decide(v, { today, monday = new Date(today + "T12:00:00Z").getUTCDay() === 1, cdiDaily = null } = {}) {
+export function decide(v, { today, monday = new Date(today + "T12:00:00Z").getUTCDay() === 1, cdiDaily = null, renewals = [] } = {}) {
   const urgent = [];
   const lad = ladder(v.mat.rows, { today });
   for (const a of v.alerts) {
@@ -41,10 +43,18 @@ export function decide(v, { today, monday = new Date(today + "T12:00:00Z").getUT
     }
     if (a.kind === "bill" && BILL_DAYS.includes(a.days)) urgent.push({ text: `🧾 <b>Fatura ${esc(a.bank)}</b> ${brl(a.amount)} ${when(a.days)} (${ddmm(a.due)})` });
   }
+  for (const r of upcomingRenewals(renewals, today, 30)) {
+    if (!RENEWAL_DAYS.includes(r.days)) continue;
+    const price = r.amount ? ` · ${brl(r.amount, 2)}${r.every === "month" ? "/mês" : r.every === "year" ? "/ano" : ""}` : "";
+    urgent.push({ text: `🔁 <b>${esc(r.name)}</b> ${r.days === 0 ? "renova hoje" : r.days === 1 ? "renova amanhã" : `renova em ${r.days} dias`} (${ddmm(r.date)})${price}${r.note ? `\n   ${esc(r.note)}` : ""}` });
+  }
   const weekly = [];
   if (monday) {
     for (const a of v.alerts) {
-      if (a.kind === "idle") weekly.push(`🏦 ${esc(a.bank)}: ${brl(a.amount)} parado na conta${joint(a)}`);
+      if (a.kind === "idle") {
+        const c = idleCost(a.amount, cdiDaily);
+        weekly.push(`🏦 ${esc(a.bank)}: ${brl(a.amount)} parado na conta${joint(a)}${c ? ` · ~${money(c)} por dia útil` : ""}`);
+      }
       if (a.kind === "fgc") weekly.push(`🛡️ FGC: ${esc(a.issuer)} ${brl(a.amount)}, ${brl(a.over)} acima do limite${joint(a)}`);
       if (a.kind === "maturity" && !MATURITY_DAYS.includes(a.days)) weekly.push(`📅 ${esc(a.issuer)} ${brl(a.amount)} vence ${ddmm(a.due)}${joint(a)}`);
     }

@@ -4,9 +4,9 @@ const CACHE = "cofre-0.16.0";
 const SHELL = [
   "./", "index.html", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png",
   "src/app.css", "src/tokens.css", "src/lib/bio.js", "src/lib/cardtx.js", "src/lib/categorize.js",
-  "src/lib/cdblca.js", "src/lib/format.js", "src/lib/ics.js", "src/lib/income.js", "src/lib/ladder.js",
-  "src/lib/model.js", "src/lib/pluggy.js", "src/lib/projection.js", "src/lib/spend.js", "src/lib/vault.js",
-  "src/lib/view.js", "src/main.js", "src/screens/home.js", "src/screens/investments/income.js",
+  "src/lib/cdblca.js", "src/lib/decisions.js", "src/lib/format.js", "src/lib/ics.js", "src/lib/income.js",
+  "src/lib/ladder.js", "src/lib/model.js", "src/lib/pluggy.js", "src/lib/projection.js", "src/lib/spend.js",
+  "src/lib/vault.js", "src/lib/view.js", "src/main.js", "src/screens/home.js", "src/screens/investments/income.js",
   "src/screens/investments/index.js", "src/screens/investments/maturities.js", "src/screens/investments/rules.js",
   "src/screens/investments/wallet.js", "src/screens/projection/assumptions.js", "src/screens/projection/chart.js",
   "src/screens/projection/index.js", "src/screens/projection/reality.js", "src/screens/projection/scenarios.js",

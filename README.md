@@ -21,7 +21,9 @@ DENYLIST=/path/outside/repo/denylist.txt scripts/install-hooks.sh
 
 `watch/` runs once a day from `.github/workflows/watch.yml` (08:00 BRT). It pulls Pluggy with the same `src/lib`
 the app uses and sends the decisions that are due to a private Telegram chat: maturities at D-7/3/1/0 with the
-ladder's split, card bills at D-3/1, and a Monday digest (idle cash, FGC, failed banks, expiring consents). This is
+ladder's split, card bills at D-3/1, renewals (subscriptions, annual plans) at D-30/7/1/0, and a Monday digest (idle cash with its cost
+per business day, FGC, failed banks, expiring consents). The renewal list is a private Actions secret (`COFRE_RENEWALS`)
+and a `renewals` list in the rules file, never in this repository. This is
 the one place data leaves the phone: the message text goes through Telegram. Credentials live only in the repo's
 Actions secrets, and the logs carry counts only.
 
