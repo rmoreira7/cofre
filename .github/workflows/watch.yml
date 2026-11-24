@@ -30,4 +30,5 @@ jobs:
           COFRE_ENTITIES: ${{ secrets.COFRE_ENTITIES }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FORCE_DIGEST: ${{ inputs.digest && '1' || '' }}
