@@ -15,3 +15,11 @@ push with a private denylist kept outside the repo:
 ```bash
 DENYLIST=/path/outside/repo/denylist.txt scripts/install-hooks.sh
 ```
+
+## Daily watcher
+
+`watch/` runs once a day from `.github/workflows/watch.yml` (08:00 BRT). It pulls Pluggy with the same `src/lib`
+the app uses and sends the decisions that are due to a private Telegram chat: maturities at D-7/3/1/0 with the
+ladder's split, card bills at D-3/1, and a Monday digest (idle cash, FGC, failed banks, expiring consents). This is
+the one place data leaves the phone: the message text goes through Telegram. Credentials live only in the repo's
+Actions secrets, and the logs carry counts only.
