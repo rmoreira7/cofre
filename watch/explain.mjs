@@ -2,7 +2,7 @@
 // The model never computes: every number in its reply must appear literally in the facts, or the reply is dropped and
 // the message goes out without it. Any failure (no key, HTTP error, timeout, budget) returns null and never blocks.
 
-export const MODEL = "gpt-5.4-mini";
+export const MODEL = "gpt-6-luna";
 export const MAX_CHARS = 320;
 
 const INSTRUCTIONS = `Você explica, em português do Brasil, uma decisão financeira pessoal já calculada por regras.
