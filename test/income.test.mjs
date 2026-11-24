@@ -127,3 +127,22 @@ test("monthlyHistory: steps grouped by the month they end in, estimate for the s
   assert.equal(h[1].banks.y.measured, 11);
   assert.notEqual(h[1].banks.y.estimated, null);
 });
+
+import { maturityEarnings } from "../src/lib/income.js";
+test("maturityEarnings: invested, receita after tax, yearly rate, IR bracket and the estimate to the due date", () => {
+  const r = { due: "2026-12-08", parts: [{ balance: 900, orig: 750, tax: 30, bought: "2025-08-29", cdi: 125, subtype: "CDB" }] };
+  const e = maturityEarnings(r, "2026-11-24", 0.055);
+  assert.equal(e.orig, 750); assert.equal(e.gain, 150); assert.equal(e.tax, 30);
+  assert.ok(Math.abs(e.pct - 0.2) < 1e-9);
+  assert.equal(e.bracket, 0.175); // 466 days held to maturity
+  assert.ok(e.yearly > 0.15 && e.yearly < 0.16);
+  assert.equal(e.est.days, 10);
+  assert.ok(e.est.gain > 150 && e.est.gain < 160);
+});
+test("maturityEarnings: several bonds add up; a missing invested amount means no line; exempt and past due", () => {
+  const two = maturityEarnings({ due: "2027-01-10", parts: [{ balance: 500, orig: 400, tax: 0, bought: "2025-01-02", subtype: "LCA" }, { balance: 300, orig: 250, tax: 0, bought: "2025-03-01", subtype: "LCA" }] }, "2026-11-24", null);
+  assert.equal(two.orig, 650); assert.equal(two.gain, 150); assert.equal(two.bracket, 0);
+  assert.equal(two.yearly, null); assert.equal(two.bought, null); assert.equal(two.earliest, "2025-01-02"); assert.equal(two.est, null);
+  assert.equal(maturityEarnings({ due: "2027-01-10", parts: [{ balance: 500, orig: null }] }, "2026-11-24"), null);
+  assert.equal(maturityEarnings({ due: "2026-11-20", parts: [{ balance: 500, orig: 400, cdi: 100, bought: "2025-01-02" }] }, "2026-11-24", 0.05).est, null);
+});

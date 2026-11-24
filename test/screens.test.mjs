@@ -87,3 +87,13 @@ test("Rendimentos shows the measured history with the joint account apart", () =
   assert.match(html, /data-hb="itau"/);
   assert.match(html, /conjunta/);
 });
+
+test("the receita of a maturity: Próximos 30 dias, Vencimentos and the decision card", () => {
+  const t = home.context(ctx);
+  assert.match(home.subs.find((x) => x.id === "summary").render(t, ctx), /\+ R\$ 200 de receita · aplicou R\$ 1\.800/);
+  assert.match(home.subs.find((x) => x.id === "decisions").render(t, ctx), /Rendeu \+ R\$ 200 líquidos<\/b><\/span> sobre R\$ 1\.800 aplicados em 01\/06\/25/);
+  const mat = investments.context(ctx).mat.rows.find((r) => r.issuer === "Emissor B");
+  assert.equal(mat.earn.gain, 200);
+  assert.equal(mat.earn.tax, 40);
+  assert.ok(mat.earn.est, "a CDI bond with today's CDI gets the estimate");
+});

@@ -81,7 +81,9 @@ export function rateLabel(i) {
 const fmtNum = (n) => Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 
 function positionsOf(it) {
-  const out = it.investments.map((i) => ({ bank: it.label, issuer: shortIssuer(i.issuer || i.name), name: i.name, subtype: i.subtype, balance: i.balance || 0, rate: rateLabel(i), cdi: i.rateType === "CDI" ? i.rate : null, due: i.dueDate ? i.dueDate.slice(0, 10) : null }));
+  const out = it.investments.map((i) => ({ bank: it.label, issuer: shortIssuer(i.issuer || i.name), name: i.name, subtype: i.subtype, balance: i.balance || 0, rate: rateLabel(i), cdi: i.rateType === "CDI" ? i.rate : null, due: i.dueDate ? i.dueDate.slice(0, 10) : null,
+    // for the receita of a maturity (src/lib/income.js maturityEarnings): invested, IR + IOF withheld, bought on
+    orig: i.amountOriginal > 0 ? i.amountOriginal : null, tax: (i.taxes || 0) + (i.taxes2 || 0), bought: i.purchaseDate ? i.purchaseDate.slice(0, 10) : null, taxExempt: Boolean(i.taxExempt) }));
   for (const a of it.accounts) for (const r of a.reserved || []) out.push({ bank: it.label, issuer: r.name, name: r.name, subtype: "RESERVED_BALANCE", balance: r.amount, rate: r.pct ? `${fmtNum(r.pct * 100)}% CDI` : "–", cdi: r.pct ? r.pct * 100 : null, due: null, liquid: true });
   return out;
 }
@@ -138,8 +140,9 @@ export function maturities(h, today) {
   for (const b of h.banks) for (const p of b.positions) {
     if (!p.due || AUTO_RENEW.has(b.label)) continue;
     const k = `${p.due}|${b.label}|${p.issuer}`;
-    const g = groups.get(k) || { due: p.due, bank: b.label, issuer: p.issuer, n: 0, balance: 0, rates: new Set(), joint: b.joint };
+    const g = groups.get(k) || { due: p.due, bank: b.label, issuer: p.issuer, n: 0, balance: 0, rates: new Set(), joint: b.joint, parts: [] };
     g.n++; g.balance += p.balance; g.rates.add(p.rate);
+    g.parts.push({ balance: p.balance, orig: p.orig, tax: p.tax, bought: p.bought, cdi: p.cdi, subtype: p.subtype, taxExempt: p.taxExempt });
     groups.set(k, g);
   }
   const rows = [...groups.values()].map((g) => ({
@@ -206,7 +209,7 @@ export function fgc(h) {
 export function timeline({ cards = [], mat, salary = [], today, days = 30 }) {
   const out = [];
   for (const c of cards) if (c.due && c.bill > 0 && daysBetween(today, c.due) >= 0 && daysBetween(today, c.due) <= days) out.push({ date: c.due, kind: "bill", name: `Fatura ${c.name}`, amount: -c.bill, early: c.early || 0 });
-  for (const r of mat.rows) if (r.days >= 0 && r.days <= days) out.push({ date: r.due, kind: "maturity", name: `${r.issuer}${r.n > 1 ? ` ×${r.n}` : ""} vence`, bank: r.bank, joint: Boolean(r.joint), rates: r.rates, amount: r.balance, brb: r.tag === "brb" });
+  for (const r of mat.rows) if (r.days >= 0 && r.days <= days) out.push({ date: r.due, kind: "maturity", name: `${r.issuer}${r.n > 1 ? ` ×${r.n}` : ""} vence`, bank: r.bank, joint: Boolean(r.joint), rates: r.rates, amount: r.balance, brb: r.tag === "brb", earn: r.earn || null });
   for (const f of salary) out.push({ date: f.date, kind: "salary", from: f.from, amount: f.amount, forecast: true });
   return out.sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind));
 }

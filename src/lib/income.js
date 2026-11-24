@@ -127,6 +127,30 @@ export function businessDays(a, b) {
   return n;
 }
 
+// What a maturity (one issuer, one date, maybe several bonds) earned: invested, receita after tax so far (Pluggy's balance
+// is already net of IR), the IR + IOF withheld, and, for CDI bonds with today's CDI, an estimate of the balance and
+// receita on the due date. Null when any bond lacks its invested amount: no line beats a wrong one.
+// The yearly rate and the bracket only when every bond shares them (one purchase date; one bracket).
+export function maturityEarnings(r, today, cdiDaily = null) {
+  const parts = r.parts || [];
+  if (!parts.length || parts.some((p) => !(p.orig > 0))) return null;
+  const orig = parts.reduce((a, p) => a + p.orig, 0), balance = parts.reduce((a, p) => a + p.balance, 0);
+  const gain = balance - orig, tax = parts.reduce((a, p) => a + (p.tax || 0), 0);
+  const dates = [...new Set(parts.map((p) => p.bought).filter(Boolean))];
+  const bought = dates.length === 1 && parts.every((p) => p.bought) ? dates[0] : null;
+  const held = bought ? daysBetween(bought, today) : 0;
+  const yearly = bought && held >= 30 && balance > 0 ? (balance / orig) ** (365 / held) - 1 : null;
+  const rateOf = (p) => taxRate({ subtype: p.subtype, taxExempt: p.taxExempt, purchaseDate: p.bought, dueDate: r.due });
+  const rates = [...new Set(parts.map(rateOf))];
+  let est = null;
+  const bd = r.due > today ? businessDays(today, r.due) : 0;
+  if (bd > 0 && cdiDaily && parts.every((p) => p.cdi)) {
+    const add = parts.reduce((a, p) => a + (p.balance + (p.tax || 0)) * ((1 + (cdiDaily / 100) * (p.cdi / 100)) ** bd - 1) * (1 - rateOf(p)), 0);
+    est = { balance: balance + add, gain: balance + add - orig, days: bd };
+  }
+  return { orig, balance, gain, pct: gain / orig, tax, bought, earliest: dates.sort()[0] || null, yearly, bracket: rates.length === 1 ? rates[0] : null, est };
+}
+
 // The laptop's history (rules file) and the app's own log in one series, one entry per day; the app's entry wins a tie.
 export function mergeLog(seed, own) {
   const m = new Map();

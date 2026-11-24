@@ -6,6 +6,7 @@ import { holdings, cards, maturities, fgc, primaryEntity, itemStatus } from "../
 import { ladder, RUNGS } from "../src/lib/ladder.js";
 import { candidates } from "../src/lib/decisions.js";
 import { brl, daysBetween } from "../src/lib/format.js";
+import { earnText } from "../src/ui/earn.js";
 
 export const MATURITY_DAYS = [7, 3, 1, 0];
 export const BILL_DAYS = [3, 1];
@@ -49,6 +50,7 @@ export function decide(v, { today, monday = new Date(today + "T12:00:00Z").getUT
 function text(d) {
   if (d.kind === "maturity") {
     let s = `💰 <b>${esc(d.issuer)}${d.n > 1 ? ` ×${d.n}` : ""}</b> ${brl(d.amount)} ${when(d.days)} (${ddmm(d.due)})${joint(d)}`;
+    if (d.earn) s += `\n   ${earnText(d.earn)}`;
     if (d.brb) s += `\n   BRB: não renovar.`;
     if (d.suggestion) s += `\n   Sugestão da escada: ${d.suggestion.map((b) => `${brl(b.amount)} em ${b.term}`).join(" · ")}`;
     return s + `\n   Mínimo ${d.cdbMin}% CDI (CDB) · outro emissor se houver concentração.`;

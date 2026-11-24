@@ -3,6 +3,7 @@ import { brl, mil, pct, MES, esc } from "../../lib/format.js";
 import { bankName } from "../../lib/model.js";
 import { maturitiesIcs } from "../../lib/ics.js";
 import { download } from "../../ui/shell.js";
+import { earnTiles } from "../../ui/earn.js";
 
 export const id = "maturities";
 export const label = "Vencimentos";
@@ -29,7 +30,7 @@ export function bind(pane, t) {
       const tag = (r.tag === "brb" ? '<span class="chip bad">não renovar</span>' : r.tag === "conc" ? '<span class="chip warn">concentração</span>' : "")
         + (r.joint ? `<span class="chip joint">conjunta · ${esc(bankName(r.bank))}</span>` : "");
       return `<div class="mat"><div class="date${r.days <= 90 ? " soon" : ""}"><b>${Number(r.due.slice(8, 10))}</b><small>${MES[Number(r.due.slice(5, 7)) - 1]} ${r.due.slice(2, 4)}</small></div>
-        <div><b>${esc(r.issuer)}${r.n > 1 ? ` ×${r.n}` : ""}</b><div class="muted">${esc(r.rates.length > 2 ? `${r.n} títulos` : r.rates.join(" / "))} · em ${r.days} dias</div>${tag ? `<div class="mt4">${tag}</div>` : ""}</div><b>${brl(r.balance)}</b></div>`;
+        <div><b>${esc(r.issuer)}${r.n > 1 ? ` ×${r.n}` : ""}</b><div class="muted">${esc(r.rates.length > 2 ? `${r.n} títulos` : r.rates.join(" / "))} · em ${r.days} dias</div>${tag ? `<div class="mt4">${tag}</div>` : ""}</div><b>${brl(r.balance)}</b>${earnTiles(r.earn)}</div>`;
     }).concat(liquid).join("") || '<div class="muted">Nada neste período.</div>';
   };
 

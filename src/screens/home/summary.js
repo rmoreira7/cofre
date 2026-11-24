@@ -1,6 +1,7 @@
 // Início › Resumo: five short rows, each opening the sub-tab where it is dealt with; open decisions first.
 import { brl, mil, ddmm, esc, MES } from "../../lib/format.js";
 import { GO } from "../../ui/shell.js";
+import { earnLine } from "../../ui/earn.js";
 
 export const id = "summary";
 export const label = "Resumo";
@@ -73,7 +74,7 @@ function timelineCard(list) {
     // One line per event; the details live in Faturas and Vencimentos.
     const text = e.kind === "bill" ? esc(e.name)
       : e.kind === "salary" ? `Salário <small>previsto</small>`
-      : `${esc(e.name)}${e.joint ? " <small>conjunta</small>" : ""}`;
+      : `${esc(e.name)}${e.joint ? " <small>conjunta</small>" : ""}${earnLine(e.earn)}`;
     const amt = e.kind === "bill" ? `− ${brl(-e.amount)}` : e.kind === "salary" ? `+ ~${brl(e.amount)}` : brl(e.amount);
     return `<div class="${e.forecast ? "fore" : ""}"><span class="d"><b>${d}</b>${MES[Number(mo) - 1]}</span><i class="dot" style="background:var(${dot})"></i><span class="t">${text}</span><b class="${e.kind === "salary" ? "ok" : ""}">${amt}</b></div>`;
   };

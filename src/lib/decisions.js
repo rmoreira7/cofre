@@ -1,5 +1,6 @@
 // Decisions: what is open, what was decided, and how it turned out. Pure, no DOM; shared by the app and the watcher.
 import { daysBetween } from "./format.js";
+import { maturityEarnings } from "./income.js";
 
 // Renewals (subscriptions, annual plans) come from the rules file's `renewals`: [{ name, date: "YYYY-MM-DD", note?,
 // amount?, every?: "month" | "year" }]. The personal list lives on the laptop, never in this repository.
@@ -46,7 +47,7 @@ export function candidates(v, { lad, renewals = [], idleCash = 5000, cdbMin = 11
     const rung = (m) => lad?.now.find((x) => m <= x.max)?.label;
     out.push({ id: `mat:${r.bank}:${r.issuer}:${r.due}`, kind: "maturity", title: `Reaplicar ${r.issuer}${r.n > 1 ? ` ×${r.n}` : ""}`, issuer: r.issuer, n: r.n, due: r.due, days: r.days, amount: r.balance, bank: r.bank, joint: Boolean(r.joint), brb: r.tag === "brb", cdbMin,
       suggestion: p?.buys.length ? p.buys.map((b) => ({ amount: b.amount, term: term(b.months), rung: rung(b.months) })) : null,
-      rule: `CDB ≥ ${cdbMin}% CDI, outro emissor`, cost: idleCost(r.balance, cdiDaily) });
+      rule: `CDB ≥ ${cdbMin}% CDI, outro emissor`, cost: idleCost(r.balance, cdiDaily), earn: r.earn !== undefined ? r.earn : maturityEarnings(r, today, cdiDaily) });
   }
   for (const b of v.wealth.banks) {
     if (!(b.checking > idleCash)) continue;

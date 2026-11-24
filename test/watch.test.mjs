@@ -24,6 +24,13 @@ test("the maturity carries the ladder's split, the BRB rule and the joint tag", 
   assert.equal(d.urgent[0].facts["observação"], "o valor não volta para o BRB");
 });
 
+test("the maturity message says what the money earned, computed by the rules", () => {
+  const parts = [{ balance: 900, orig: 750, tax: 30, bought: "2025-08-29", cdi: 125, subtype: "CDB" }];
+  const d = decide(view({ rows: [mat(7, 900, { parts })] }), { today, cdiDaily: 0.055 });
+  assert.match(d.urgent[0].text, /Rendeu \+ R\$ 150 líquidos sobre R\$ 750 \(\d+,\d% a\.a\.\)\./);
+  assert.doesNotMatch(decide(view({ rows: [mat(7, 900)] }), { today }).urgent[0].text, /Rendeu/);
+});
+
 test("bills speak on D-3 and D-1 only", () => {
   const card = (days) => ({ bank: "card_a", name: "Cartão A", bill: 696, due: inDays(days) });
   assert.equal(decide(view({ cards: [card(3)] }), { today }).urgent.length, 1);

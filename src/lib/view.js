@@ -4,7 +4,7 @@ import { compileRules } from "./categorize.js";
 import { spendRows, incomeRows, leftover, salaryForecast, monthView, byMonth, sum, monthRange, cardCycles, BANK_CODES, DEFAULT_TARGET, clusterTrends, suggestGoals } from "./spend.js";
 import { holdings, cards, timeline, maturities as maturityLadder, fgc, primaryEntity, alerts, installmentsAhead, billMonths } from "./model.js";
 import { daysBetween } from "./format.js";
-import { income as investIncome, mergeLog, monthlyHistory } from "./income.js";
+import { income as investIncome, mergeLog, monthlyHistory, maturityEarnings } from "./income.js";
 
 export function buildView(data, today) {
   const rules = data.rules;
@@ -43,6 +43,7 @@ export function buildView(data, today) {
     income: investIncome(snap, rules, snap.cdi?.daily ?? null),
     daysTo: (iso) => daysBetween(today, iso),
   };
+  for (const r of v.mat.rows) r.earn = maturityEarnings(r, today, snap.cdi?.daily ?? null);
   v.installments = installmentsAhead(snap, rules, me, today);
   v.bills = billMonths(snap, rules, me, today);
   v.history = monthlyHistory(mergeLog(rules?.invHistory, data.invLog), Object.fromEntries(v.income.banks.map((b) => [b.label, b.net])));
