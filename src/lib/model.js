@@ -26,7 +26,7 @@ export const CONCENTRATION = 0.4;
 // Keep only what the app reads: the vault stays small and holds no field the app never shows.
 const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
 const TX = ["id", "date", "amount", "description", "operationType", "category", "status"];
-const INV = ["id", "name", "issuer", "type", "subtype", "status", "balance", "amountOriginal", "rate", "rateType", "fixedAnnualRate", "dueDate", "purchaseDate", "issueDate"];
+const INV = ["id", "name", "issuer", "type", "subtype", "status", "balance", "amountOriginal", "rate", "rateType", "fixedAnnualRate", "dueDate", "purchaseDate", "issueDate", "taxes", "taxes2", "taxExempt"];
 
 export function slim(pulled) {
   return {

@@ -5,13 +5,14 @@ import { compileRules } from "./lib/categorize.js";
 import { spendRows, incomeRows, leftover, salaryForecast, monthView, byMonth, sum, monthRange, cardCycles, BANK_CODES, DEFAULT_TARGET, clusterTrends, suggestGoals } from "./lib/spend.js";
 import { slim, holdings, cards, timeline, maturities as maturityLadder, fgc, primaryEntity, bankName, alerts, shouldAutoRefresh, installmentsAhead } from "./lib/model.js";
 import { localToday, daysBetween } from "./lib/format.js";
+import { income as investIncome, logPositions } from "./lib/income.js";
 import * as home from "./screens/home.js";
 import * as spend from "./screens/spend.js";
 import * as maturities from "./screens/maturities.js";
 import * as projection from "./screens/projection.js";
 import * as settings from "./screens/settings.js";
 
-export const APP_VERSION = "0.14.0";
+export const APP_VERSION = "0.15.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, maturities, projection, settings };
 
@@ -80,6 +81,7 @@ export function buildView(data, today) {
     cards: cards(snap, rules, me, today),
     mat: maturityLadder(wealth, today),
     guarantee: fgc(wealth),
+    income: investIncome(snap, rules, snap.cdi?.daily ?? null),
     daysTo: (iso) => daysBetween(today, iso),
   };
   v.installments = installmentsAhead(snap, rules, me, today);
@@ -100,6 +102,22 @@ async function rates(snapshot, prev) {
     const out = { at: new Date().toISOString() };
     for (const c of cur) { const v = Number(j[`${c}BRL`]?.bid); if (v > 0) out[c] = v; }
     return Object.keys(out).length > 1 ? out : prev || null;
+  } catch {
+    return prev || null;
+  }
+}
+
+// Today's CDI in % per business day (Central Bank, SGS series 12), for Rendimentos. Nothing personal leaves the device.
+// On failure the previous value stays.
+async function cdi(prev) {
+  try {
+    const r = await fetch("https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados/ultimos/1?formato=json");
+    if (!r.ok) throw new Error(r.status);
+    const [last] = await r.json();
+    const daily = Number(String(last.valor).replace(",", "."));
+    if (!(daily > 0 && daily < 1)) throw new Error("bad value");
+    const [d, m, y] = last.data.split("/");
+    return { daily, date: `${y}-${m}-${d}` };
   } catch {
     return prev || null;
   }
@@ -126,6 +144,7 @@ async function refresh() {
     const prev = state.data.snapshot;
     const next = slim(pulled);
     next.fx = await rates(next, prev?.fx);
+    next.cdi = await cdi(prev?.cdi);
     // A failed bank keeps its previous data instead of disappearing from the totals.
     next.items = next.items.map((it) => (it.error && prev?.items.find((o) => o.label === it.label && !o.error)) ? { ...prev.items.find((o) => o.label === it.label && !o.error), stale: true } : it);
     // One wealth point per day (the last refresh of the day wins), per bank, for Projeção's reality check.
@@ -133,7 +152,7 @@ async function refresh() {
     const h = me ? holdings(next, state.data.rules, me) : null;
     const log = (state.data.wealthLog || []).filter((w) => w.d !== localToday());
     if (h) log.push({ d: localToday(), banks: Object.fromEntries(h.banks.map((b) => [b.label, Math.round(b.total * 100) / 100])) });
-    await ctx.save({ ...state.data, snapshot: next, wealthLog: log });
+    await ctx.save({ ...state.data, snapshot: next, wealthLog: log, invLog: logPositions(state.data.invLog, next, localToday()) });
     state.busy = false;
     say(failed.length ? `Falhou: ${failed.map((f) => bankName(f.label)).join(", ")} (mantidos os dados anteriores)` : "");
   } catch (e) {

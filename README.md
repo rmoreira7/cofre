@@ -5,7 +5,8 @@ A personal finance PWA that runs entirely on the phone.
 - The site serves **code only**. No data, keys or personal rules are ever committed or hosted.
 - The phone talks directly to the [Pluggy](https://pluggy.ai) Open Finance API, and keeps credentials and the
   data snapshot encrypted in IndexedDB (WebCrypto, PIN-derived key).
-- No framework, no runtime dependencies, no third-party requests.
+- No framework, no runtime dependencies. Besides Pluggy, the phone calls two public APIs with nothing personal in
+  the request: AwesomeAPI (currency codes, for foreign balances) and the Central Bank (today's CDI, for Rendimentos).
 
 ## Leak gate
 
