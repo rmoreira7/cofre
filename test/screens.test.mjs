@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildView } from "../src/lib/view.js";
-import * as home from "../src/screens/home.js";
+import { screen as home } from "../src/screens/home/index.js";
 import { screen as spend } from "../src/screens/spend/index.js";
 import { screen as investments } from "../src/screens/investments/index.js";
 import { screen as projection } from "../src/screens/projection/index.js";
@@ -35,11 +35,13 @@ const snapshot = {
 };
 const p = { salary: [{ from: "2020-01", net: 1000 }], thirteenth: { months: [11, 12], share: 0.5 }, vacation: { month: 1, amount: 300, from_year: 2031 }, cdi: { 2026: 14, 2027: 13, 2028: 12 }, cdi_pct: 110, ir: 15, from: "2026-11-06" };
 const rules = {
+  renewals: [{ name: "Plano Teste", date: "2027-03-01", amount: 20, every: "month" }],
   format: "cofre-rules", v: 1, entities: { me: { banks: ["nubank", "xp"] }, mom: { banks: ["itau"] } }, entity_rules: {}, desc_rules: [], overrides: {}, learned: {}, projection: p,
   wealth: [{ d: "2026-11-06", banks: { nubank: 2500, xp: 9000 } }],
   invHistory: [{ v: 2, d: "2026-11-06", p: { n1: [1090, 1000, 1, "nubank"], x1: [1990, 1800, 1, "xp"], x2: [2990, 2900, 1, "xp"], x3: [3990, 4000, 1, "xp"], i1: [4990, 5000, 1, "itau"] } }],
 };
-const data = { v: 1, settings: { target: 700 }, credentials: { clientId: "id", clientSecret: "s", items: [{ label: "nubank", id: "0".repeat(36) }] }, rules, snapshot, userOverrides: {}, invLog: [{ v: 2, d: today, p: { n1: [1100, 1000, 1, "nubank"], x1: [2000, 1800, 1, "xp"], x2: [3000, 2900, 1, "xp"], x3: [4000, 4000, 1, "xp"], i1: [5000, 5000, 1, "itau"] } }] };
+const data = { v: 1, settings: { target: 700 }, credentials: { clientId: "id", clientSecret: "s", items: [{ label: "nubank", id: "0".repeat(36) }] }, rules, snapshot, userOverrides: {}, decisions: { "idle:itau": { status: "done", at: "2026-11-20", d: { id: "idle:itau", kind: "idle", title: "Investir o parado no Itaú", amount: 4000, bank: "itau", due: "2026-11-20" } } },
+  invLog: [{ v: 2, d: today, p: { n1: [1100, 1000, 1, "nubank"], x1: [2000, 1800, 1, "xp"], x2: [3000, 2900, 1, "xp"], x3: [4000, 4000, 1, "xp"], i1: [5000, 5000, 1, "itau"] } }] };
 let view = null;
 const ctx = { data, version: "test", progress: "", busy: false, bio: { available: false, enrolled: false }, view: () => (view ||= buildView(data, today)), sub: (tab, ids) => ids[0] };
 
@@ -48,13 +50,19 @@ test("the view builds from the fixture", () => {
   assert.ok(v.month && v.wealth.total > 0 && v.income.own.n === 4 && v.bills.length === 3 && v.history.length === 1);
 });
 
-test("Início renders its five summary rows with links into the sub-tabs", () => {
-  const el = { innerHTML: "", onclick: null };
-  home.render(el, ctx);
-  for (const go of ["spend:cycle", "investments:wallet", "spend:bills"]) assert.match(el.innerHTML, new RegExp(`data-go="${go}"`));
+test("Início › Resumo links into the sub-tabs; Decisões lists what is open and what was decided", () => {
+  const t = home.context(ctx);
+  const html = home.subs.find((x) => x.id === "summary").render(t, ctx);
+  for (const go of ["spend:cycle", "investments:wallet", "spend:bills", "home:decisions"]) assert.match(html, new RegExp(`data-go="${go}"`));
+  const dec = home.subs.find((x) => x.id === "decisions");
+  assert.match(dec.label(t), /^Decisões · \d+$/);
+  const page = dec.render(t, ctx);
+  assert.match(page, /data-act="done"/);
+  assert.match(page, /Decididas/);
+  assert.match(page, /Próximas/);
 });
 
-for (const s of [spend, investments, projection, settings]) {
+for (const s of [home, spend, investments, projection, settings]) {
   test(`${s.title}: every sub-tab renders`, () => {
     const t = s.context(ctx);
     for (const sub of s.subs) {

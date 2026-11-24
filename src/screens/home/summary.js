@@ -1,19 +1,32 @@
-import { brl, mil, ddmm, esc, MES } from "../lib/format.js";
-import { header, needsSetup, GO } from "../ui/shell.js";
+// Início › Resumo: five short rows, each opening the sub-tab where it is dealt with; open decisions first.
+import { brl, mil, ddmm, esc, MES } from "../../lib/format.js";
+import { GO } from "../../ui/shell.js";
 
-// Início is a summary: five short rows, each opening the sub-tab where it is dealt with.
-export function render(el, ctx) {
-  if (needsSetup(el, ctx, "Cofre")) return;
-  const v = ctx.view();
-  el.innerHTML = `${header(ctx, "Cofre")}
-    ${cycleSummary(v)}
-    ${alertsCard(v.alerts)}
+export const id = "summary";
+export const label = "Resumo";
+
+export function render(t) {
+  const { v, board } = t;
+  return `${cycleSummary(v)}
+    ${decisionsSummary(board.open)}
     ${timelineCard(v.timeline)}
     ${wealthSummary(v)}
     ${billsSummary(v)}`;
-  el.onclick = (e) => {
-    if (e.target.closest('[data-a="refresh"]')) ctx.refresh();
-  };
+}
+
+const money = (n) => brl(n, Math.abs(n) < 100 ? 2 : 0);
+const when = (d) => (d.days <= 0 ? "hoje" : ddmm(d.due));
+
+// The open decisions, by deadline; the details and the buttons are in Início › Decisões.
+function decisionsSummary(open) {
+  if (!open.length) return "";
+  const shown = open.slice(0, 5);
+  return `<button class="card tap-card sum-card alert-card" data-go="home:decisions">
+      <div class="row"><div class="label">Decisões</div><span class="chip warn">${open.length} ${open.length === 1 ? "aberta" : "abertas"}</span></div>
+      <div class="row"><div class="dlist grow">${shown.map((d) => `<div><span><b>${when(d)}</b> ${esc(d.title)}${d.joint ? " <small>conjunta</small>" : ""}</span><span class="nw${d.kind === "idle" ? " warn" : ""}">${d.kind === "idle" && d.cost ? `~${money(d.cost)}/dia útil` : d.amount != null ? brl(d.amount) : ""}</span></div>`).join("")}</div>${GO}</div>
+      ${open.length > shown.length ? `<div class="muted sm">+ ${open.length - shown.length} outras</div>` : ""}
+      <div class="to">Início › Decisões</div>
+    </button>`;
 }
 
 function cycleSummary(v) {
@@ -66,15 +79,4 @@ function timelineCard(list) {
   };
   return `<div class="card"><div class="row"><div class="label">Próximos 30 dias</div><span class="muted sm">entra · sai · vence</span></div>
     <div class="tl mt6">${list.map(row).join("")}</div></div>`;
-}
-
-function alertsCard(list) {
-  if (!list.length) return "";
-  const row = (a) => {
-    if (a.kind === "bill") return `<div data-go="spend:bills" class="tap"><span class="l">Fatura ${esc(a.bank)} ${a.days === 0 ? "vence hoje" : `vence em ${a.days} ${a.days === 1 ? "dia" : "dias"}`}<small>${ddmm(a.due)}</small></span><b>${brl(a.amount)}</b></div>`;
-    if (a.kind === "fgc") return `<div data-go="investments:rules" class="tap"><span class="l">${esc(a.issuer)}: ${brl(a.amount)} acima do FGC<small>${brl(a.over)} além dos R$ 250 mil por emissor${a.joint ? " · inclui a conta conjunta" : ""} · mover o excedente para outro emissor</small></span><span class="chip bad">FGC</span></div>`;
-    if (a.kind === "maturity") return `<div data-go="investments:maturities" class="tap"><span class="l">${esc(a.issuer)}${a.n > 1 ? ` ×${a.n}` : ""} vence em ${a.days} ${a.days === 1 ? "dia" : "dias"}<small>${a.scope === "joint" ? "conta conjunta · " : ""}${a.brb ? "não renovar no BRB" : `reinvestir em CDB ≥ ${a.cdbMin}% CDI ou liquidez diária`}</small></span><b>${brl(a.amount)}</b></div>`;
-    return `<div data-go="investments:wallet" class="tap"><span class="l">${brl(a.amount)} parados na conta<small>${esc(a.bank)}${a.scope === "joint" ? " · conta conjunta" : ""} · investir o que passar da reserva</small></span><span class="chip warn">parado</span></div>`;
-  };
-  return `<div class="card alert-card"><div class="label">Atenção</div><div class="list mt6">${list.map(row).join("")}</div></div>`;
 }
