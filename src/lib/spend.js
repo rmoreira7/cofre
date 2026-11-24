@@ -247,13 +247,19 @@ export function clusterTrends(byM, keys) {
 export function suggestGoals({ income, trends }) {
   if (!(income > 0)) return null;
   const target = Math.round((income * 0.9) / 500) * 500;
+  const limits = limitsFor(target, trends);
+  return limits && { target, limits, income, left: income - target };
+}
+
+// The group limits for a given target: each group's median scaled to it (Ajustes › Recalcular pela mediana).
+export function limitsFor(target, trends) {
   const ids = CLUSTERS.filter((c) => c.limit !== null).map((c) => c.id);
-  const base = ids.reduce((a, id) => a + trends[id].median, 0);
+  const base = ids.reduce((a, id) => a + (trends?.[id]?.median || 0), 0);
   if (!base) return null;
   const limits = Object.fromEntries(ids.map((id) => [id, Math.round((trends[id].median * target) / base / 50) * 50]));
   const top = ids.reduce((a, id) => (trends[id].median > trends[a].median ? id : a));
   limits[top] += target - Object.values(limits).reduce((a, b) => a + b, 0);
-  return { target, limits, income, left: income - target };
+  return limits;
 }
 
 // The Gastos screen: this month against the target, per cluster, plus the last 12 months.

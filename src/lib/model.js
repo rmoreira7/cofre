@@ -8,7 +8,8 @@ import { cleanCard } from "./cardtx.js";
 export const BANKS = {
   nubank: { name: "Nubank", color: "#8a05be", codes: ["260"] },
   xp: { name: "XP", color: "var(--ink)", codes: ["102", "348"] },
-  itau: { name: "Itaú", color: "var(--joint)", codes: ["341"] },
+  // fgc: the bank's own checking account is a deposit the FGC covers, under this issuer.
+  itau: { name: "Itaú", color: "var(--joint)", codes: ["341"], fgc: "ITAU UNIBANCO S.A." },
   neon: { name: "Neon", color: "#00a3b4", codes: ["536", "655"] },
   mercadopago: { name: "Mercado Pago", color: "#00b1ea", codes: ["323"] },
   // balanceOnly: Meu Pluggy gives Wise's balances but not its card purchases (only currency conversions), so its
@@ -85,11 +86,14 @@ function positionsOf(it) {
   return out;
 }
 
-// Net worth of one entity: invested (incl. reserved balances) + checking, per bank.
+// Net worth: invested (incl. reserved balances) + checking, per bank. entity = one key of rules.entities, or null for
+// every entity (the joint account included); each bank then carries `joint` when it isn't the primary entity's.
 export function holdings(snapshot, rules, entity) {
   const banks = [];
+  const primary = primaryEntity(rules);
   for (const it of snapshot.items) {
-    if (it.error || entityOf(it.label, rules) !== entity) continue;
+    const owner = entityOf(it.label, rules);
+    if (it.error || (entity !== null && owner !== entity)) continue;
     const positions = positionsOf(it);
     const invested = positions.reduce((a, p) => a + p.balance, 0);
     const bankAcc = it.accounts.filter((a) => a.type !== "CREDIT");
@@ -97,7 +101,7 @@ export function holdings(snapshot, rules, entity) {
     const foreign = bankAcc.filter((x) => x.currencyCode && x.currencyCode !== "BRL" && x.balance).map((x) => ({ currency: x.currencyCode, amount: x.balance, brl: toBRL(x.balance, x.currencyCode, snapshot.fx) }));
     const cdi = positions.filter((p) => p.cdi);
     const cdiAvg = cdi.length ? cdi.reduce((a, p) => a + p.cdi * p.balance, 0) / cdi.reduce((a, p) => a + p.balance, 0) : null;
-    banks.push({ label: it.label, name: bankName(it.label), invested, checking, total: invested + checking, positions, cdiAvg, count: positions.filter((p) => !p.liquid).length, reserved: positions.filter((p) => p.liquid), foreign });
+    banks.push({ label: it.label, name: bankName(it.label), invested, checking, total: invested + checking, positions, cdiAvg, count: positions.filter((p) => !p.liquid).length, reserved: positions.filter((p) => p.liquid), foreign, joint: Boolean(owner && primary && owner !== primary) });
   }
   banks.sort((a, b) => b.total - a.total);
   return { total: banks.reduce((a, b) => a + b.total, 0), banks };
@@ -134,7 +138,7 @@ export function maturities(h, today) {
   for (const b of h.banks) for (const p of b.positions) {
     if (!p.due || AUTO_RENEW.has(b.label)) continue;
     const k = `${p.due}|${b.label}|${p.issuer}`;
-    const g = groups.get(k) || { due: p.due, bank: b.label, issuer: p.issuer, n: 0, balance: 0, rates: new Set() };
+    const g = groups.get(k) || { due: p.due, bank: b.label, issuer: p.issuer, n: 0, balance: 0, rates: new Set(), joint: b.joint };
     g.n++; g.balance += p.balance; g.rates.add(p.rate);
     groups.set(k, g);
   }
@@ -143,9 +147,9 @@ export function maturities(h, today) {
     tag: /^BRB\b/.test(g.issuer) ? "brb" : concentrated(g.bank, g.issuer) ? "conc" : null,
   }));
   rows.sort((a, b) => a.due.localeCompare(b.due) || b.balance - a.balance);
-  const liquid = h.banks.flatMap((b) => b.reserved.map((p) => ({ ...p, bankName: b.name })));
+  const liquid = h.banks.flatMap((b) => b.reserved.map((p) => ({ ...p, bankName: b.name, joint: b.joint })));
   const conc = Object.entries(share).filter(([k]) => concentrated(...k.split("|")))
-    .map(([k, v]) => ({ bank: k.split("|")[0], issuer: k.split("|")[1], share: v })).sort((a, b) => b.share - a.share);
+    .map(([k, v]) => ({ bank: k.split("|")[0], issuer: k.split("|")[1], share: v, joint: h.banks.find((b) => b.label === k.split("|")[0])?.joint })).sort((a, b) => b.share - a.share);
   const brbLast = rows.filter((r) => r.tag === "brb").map((r) => r.due).sort().at(-1) || null;
   return { rows, liquid, conc, brbLast, total: rows.reduce((a, r) => a + r.balance, 0) };
 }
@@ -176,19 +180,26 @@ export function shouldAutoRefresh(snapshot, now = new Date(), { maxAgeH = 24, gr
 }
 
 // Things that need a decision soon. Plain data; the screen picks the words and colours.
-// One ladder for Vencimentos: the owner's plus each joint account's, joint rows flagged. Concentration and BRB stay
-// per account (computed inside each ladder); totals stay apart, since the joint money is not the owner's.
-export function mergeLadders(own, joints = []) {
-  const flag = (xs) => xs.map((x) => ({ ...x, joint: true }));
-  const rows = [...own.rows, ...joints.flatMap((m) => flag(m.rows))].sort((a, b) => a.due.localeCompare(b.due) || b.balance - a.balance);
-  return {
-    rows,
-    liquid: [...own.liquid, ...joints.flatMap((m) => flag(m.liquid))],
-    conc: [...own.conc, ...joints.flatMap((m) => flag(m.conc))],
-    brbLast: [own.brbLast, ...joints.map((m) => m.brbLast)].filter(Boolean).sort().at(-1) || null,
-    total: own.total,
-    jointTotal: joints.reduce((a, m) => a + m.total, 0),
+// FGC: R$ 250 mil per issuer, summed across every bank (an issuer bought at XP and at Itaú shares one limit).
+// Covered: bank deposits (CDB, RDB, LC), LCA, LCI, LIG and a bank's own checking account; funds, Tesouro, CRA/CRI,
+// debentures and payment accounts are not. Joint holdings count in full: the guarantee splits among the holders, so
+// this errs on the safe side.
+export const FGC_LIMIT = 250000;
+const FGC_SUBTYPES = new Set(["CDB", "RDB", "LC", "LCA", "LCI", "LIG"]);
+export function fgc(h) {
+  const by = new Map();
+  const add = (issuer, amount, b) => {
+    if (!(amount > 0)) return;
+    const e = by.get(issuer) || { issuer, amount: 0, banks: new Set(), joint: false };
+    e.amount += amount; e.banks.add(b.label); e.joint ||= b.joint;
+    by.set(issuer, e);
   };
+  for (const b of h.banks) {
+    for (const p of b.positions) if (FGC_SUBTYPES.has(p.subtype)) add(p.issuer, p.balance, b);
+    if (BANKS[b.label]?.fgc) add(shortIssuer(BANKS[b.label].fgc), b.checking, b);
+  }
+  const issuers = [...by.values()].map((e) => ({ ...e, banks: [...e.banks], share: e.amount / FGC_LIMIT, over: e.amount > FGC_LIMIT })).sort((a, b) => b.amount - a.amount);
+  return { issuers, total: issuers.reduce((a, e) => a + e.amount, 0), limit: FGC_LIMIT };
 }
 
 // Início's next-30-days list: bills going out, maturities (own and joint), and the forecast salary coming in.
@@ -200,17 +211,16 @@ export function timeline({ cards = [], mat, salary = [], today, days = 30 }) {
   return out.sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind));
 }
 
-export function alerts({ mine, joint, mat, cards, today }, { idleCash = 5000, cdbMin = 110, soonDays = 30, billDays = 5 } = {}) {
+export function alerts({ wealth, mat, cards, today, guarantee }, { idleCash = 5000, cdbMin = 110, soonDays = 30, billDays = 5 } = {}) {
   const out = [];
-  const idle = (h, scope) => h.banks.filter((b) => b.checking > idleCash).forEach((b) => out.push({ kind: "idle", scope, bank: b.name, amount: b.checking }));
-  idle(mine, "mine");
-  for (const j of joint) idle(j.holdings, "joint");
+  for (const b of wealth.banks.filter((b) => b.checking > idleCash)) out.push({ kind: "idle", scope: b.joint ? "joint" : "mine", bank: b.name, amount: b.checking });
+  for (const e of guarantee?.issuers.filter((e) => e.over) || []) out.push({ kind: "fgc", issuer: e.issuer, amount: e.amount, over: e.amount - FGC_LIMIT, joint: e.joint });
   for (const r of mat.rows.filter((r) => r.days >= 0 && r.days <= soonDays)) out.push({ kind: "maturity", issuer: r.issuer, n: r.n, due: r.due, days: r.days, amount: r.balance, brb: r.tag === "brb", cdbMin, scope: r.joint ? "joint" : "mine" });
   for (const c of cards.filter((c) => c.due && c.bill > 0)) {
     const d = daysBetween(today, c.due);
     if (d >= 0 && d <= billDays) out.push({ kind: "bill", bank: c.name, due: c.due, days: d, amount: c.bill });
   }
-  const rank = { bill: 0, maturity: 1, idle: 2 };
+  const rank = { bill: 0, fgc: 1, maturity: 2, idle: 3 };
   return out.sort((a, b) => rank[a.kind] - rank[b.kind] || (a.days ?? 99) - (b.days ?? 99) || b.amount - a.amount);
 }
 

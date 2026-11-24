@@ -38,13 +38,16 @@ const pulled = {
   ],
 };
 
-test("holdings: invested + reserved + checking per entity; joint never mixed in", () => {
+test("holdings: per entity (joint never mixed in), or every entity with the joint banks tagged", () => {
   const s = slim(pulled);
   assert.equal(s.items[0].investments.length, 4);
   const h = holdings(s, rules, "me");
   assert.equal(h.total, 1000 + 100 + 50);
   assert.equal(holdings(s, rules, "mom").total, 999);
   assert.equal(h.banks.find((b) => b.label === "mp").reserved[0].rate, "140% CDI");
+  const all = holdings(s, rules, null);
+  assert.equal(all.total, 1000 + 100 + 50 + 999);
+  assert.deepEqual(all.banks.map((b) => [b.label, b.joint]).sort(), [["itau", true], ["mp", false], ["xp", false]].sort());
 });
 
 test("maturities: grouped, tagged, concentration and BRB", () => {
@@ -91,18 +94,19 @@ test("freshness and auto-refresh follow Pluggy's daily sync", async () => {
   assert.equal(shouldAutoRefresh(null), true);
 });
 
-test("alerts: bill soon, maturity soon, idle cash; ranked", async () => {
+test("alerts: bill soon, FGC over, maturity soon, idle cash; ranked", async () => {
   const { alerts } = await import("../src/lib/model.js");
-  const bank = (name, checking) => ({ name, checking });
+  const bank = (name, checking, joint = false) => ({ name, checking, joint });
   const v = {
     today: "2026-11-23",
-    mine: { banks: [bank("A", 700), bank("B", 9000)] },
-    joint: [{ holdings: { banks: [bank("J", 87000)] } }],
+    wealth: { banks: [bank("A", 700), bank("B", 9000), bank("J", 87000, true)] },
+    guarantee: { issuers: [{ issuer: "Big", amount: 260000, over: true, joint: true }, { issuer: "Ok", amount: 100, over: false }] },
     mat: { rows: [{ issuer: "Alfa", n: 1, due: "2026-12-08", days: 15, balance: 2000, tag: null }, { issuer: "BRB", n: 3, due: "2027-03-03", days: 100, balance: 9, tag: "brb" }] },
     cards: [{ name: "Card", due: "2026-11-26", bill: 500 }, { name: "Late", due: "2026-12-20", bill: 10 }],
   };
   const a = alerts(v, { idleCash: 5000 });
-  assert.deepEqual(a.map((x) => [x.kind, x.bank || x.issuer, x.scope || ""]), [["bill", "Card", ""], ["maturity", "Alfa", "mine"], ["idle", "J", "joint"], ["idle", "B", "mine"]]);
+  assert.deepEqual(a.map((x) => [x.kind, x.bank || x.issuer, x.scope || ""]), [["bill", "Card", ""], ["fgc", "Big", ""], ["maturity", "Alfa", "mine"], ["idle", "J", "joint"], ["idle", "B", "mine"]]);
+  assert.equal(a[1].over, 10000);
 });
 
 test("installmentsAhead: months after the open bill, grouped by plan", async () => {
@@ -125,18 +129,17 @@ test("maturities: Nubank's self-renewing daily-liquidity positions stay out of t
   assert.equal(m.total, 50);
 });
 
-test("mergeLadders: joint rows flagged and sorted in, totals kept apart, BRB = latest of both", async () => {
-  const { mergeLadders } = await import("../src/lib/model.js");
-  const own = { rows: [{ due: "2027-02-01", balance: 50 }], liquid: [], conc: [], brbLast: "2027-01-01", total: 50 };
-  const joint = { rows: [{ due: "2027-01-15", balance: 80 }, { due: "2028-01-01", balance: 20 }], liquid: [{ balance: 5 }], conc: [{ issuer: "X", share: 0.6 }], brbLast: null, total: 100 };
-  const m = mergeLadders(own, [joint]);
-  assert.deepEqual(m.rows.map((r) => [r.due, r.joint ?? false]), [["2027-01-15", true], ["2027-02-01", false], ["2028-01-01", true]]);
-  assert.equal(m.total, 50);
-  assert.equal(m.jointTotal, 100);
-  assert.equal(m.brbLast, "2027-01-01");
-  assert.equal(m.conc[0].joint, true);
-  assert.equal(m.liquid[0].joint, true);
+test("fgc: one limit per issuer across banks; deposits, LCA/LCI and a bank's own checking count, CRA and funds don't", async () => {
+  const { fgc } = await import("../src/lib/model.js");
+  const pos = (issuer, subtype, balance) => ({ issuer, subtype, balance });
+  const g = fgc({ banks: [
+    { label: "xp", checking: 5000, joint: false, positions: [pos("Acme", "CDB", 150000), pos("Acme", "CRA", 90000), pos("Beta", "FIXED_INCOME_FUND", 80000)] },
+    { label: "itau", checking: 30000, joint: true, positions: [pos("Acme", "LCA", 120000), pos("Itau Unibanco", "CDB", 10000)] },
+  ] });
+  assert.deepEqual(g.issuers.map((e) => [e.issuer, e.amount, e.banks.join("+"), e.over, e.joint]), [["Acme", 270000, "xp+itau", true, true], ["Itau Unibanco", 40000, "itau", false, true]]);
+  assert.equal(g.total, 310000);
 });
+
 
 test("Wise: balance-only (transactions dropped), foreign balances in BRL at the snapshot's rates", async () => {
   const { slim, holdings, toBRL } = await import("../src/lib/model.js");

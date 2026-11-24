@@ -3,15 +3,15 @@ import { createBio } from "./lib/bio.js";
 import { createPluggy } from "./lib/pluggy.js";
 import { compileRules } from "./lib/categorize.js";
 import { spendRows, incomeRows, leftover, salaryForecast, monthView, byMonth, sum, monthRange, cardCycles, BANK_CODES, DEFAULT_TARGET, clusterTrends, suggestGoals } from "./lib/spend.js";
-import { slim, holdings, cards, timeline, maturities as maturityLadder, mergeLadders, primaryEntity, bankName, alerts, shouldAutoRefresh, installmentsAhead } from "./lib/model.js";
-import { localToday, daysBetween, ddmmyyyy } from "./lib/format.js";
+import { slim, holdings, cards, timeline, maturities as maturityLadder, fgc, primaryEntity, bankName, alerts, shouldAutoRefresh, installmentsAhead } from "./lib/model.js";
+import { localToday, daysBetween } from "./lib/format.js";
 import * as home from "./screens/home.js";
 import * as spend from "./screens/spend.js";
 import * as maturities from "./screens/maturities.js";
 import * as projection from "./screens/projection.js";
 import * as settings from "./screens/settings.js";
 
-export const APP_VERSION = "0.12.1";
+export const APP_VERSION = "0.13.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, maturities, projection, settings };
 
@@ -72,23 +72,14 @@ export function buildView(data, today) {
   const left = { now: leftover(income, rows, [month.month], key)[0], n: pastLeft.length, avg: { left: avg("regular"), salary: avg("salary"), other: avg("other"), spent: avg("spent"), oneOff: pastLeft.reduce((a, r) => a + r.oneOff, 0) }, history: pastLeft, salaryFrom };
   const trends = clusterTrends(m, last12);
   const goals = suggestGoals({ income: pastLeft.length ? left.avg.left + left.avg.spent : 0, trends });
-  const joint = Object.keys(rules.entities).filter((e) => e !== me).map((e) => {
-    const h = holdings(snap, rules, e);
-    const pos = h.banks.flatMap((b) => b.positions).sort((a, b) => b.balance - a.balance).slice(0, 3);
-    return {
-      holdings: h,
-      title: `Conta conjunta · ${h.banks.map((b) => b.name).join(" + ")}`,
-      total: h.total,
-      lines: [
-        ...pos.map((p) => ({ name: `${p.subtype === "LCA" || p.subtype === "LCI" ? p.subtype : p.subtype === "CDB" ? "CDB" : "Fundo"} ${p.issuer}`, meta: `${p.rate}${p.due ? " · vence " + ddmmyyyy(p.due) : ""}`, amount: p.balance })),
-        { name: "Conta corrente", meta: h.banks.map((b) => bankName(b.label)).join(" + "), amount: h.banks.reduce((a, b) => a + b.checking, 0) },
-      ],
-    };
-  });
+  // Wealth, maturities and the FGC check cover every connected account, the joint one (Itaú) included. Spending,
+  // income and Projeção stay on the owner's accounts: the joint account's flows are the household's, not his.
+  const wealth = holdings(snap, rules, null);
   const v = {
-    today, rows, mine, month, avg12, avgN, avg3, joint, left, trends, goals,
+    today, rows, mine, wealth, month, avg12, avgN, avg3, left, trends, goals,
     cards: cards(snap, rules, me, today),
-    mat: mergeLadders(maturityLadder(mine, today), joint.map((j) => maturityLadder(j.holdings, today))),
+    mat: maturityLadder(wealth, today),
+    guarantee: fgc(wealth),
     daysTo: (iso) => daysBetween(today, iso),
   };
   v.installments = installmentsAhead(snap, rules, me, today);

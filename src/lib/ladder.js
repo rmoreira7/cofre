@@ -38,7 +38,7 @@ function cost(pos, at) {
   return c;
 }
 
-// rows: maturity groups { due, balance, issuer, tag } (the owner's, not the joint account's).
+// rows: maturity groups { due, balance, issuer, tag }, every account's (the joint one included).
 // Returns today's rungs, a reinvestment plan for the maturities in the next `horizon` months, and the distribution
 // at the end of that horizon with and without following it.
 export function ladder(rows, { today, horizon = 12 }) {

@@ -27,15 +27,12 @@ export function render(el, ctx) {
     ${cycleCard(v)}
     ${alertsCard(v.alerts)}
     ${timelineCard(v.timeline)}
-    ${wealthCard(v.mine)}
-    ${cardsCard(v.cards)}
-    ${v.joint.map(jointCard).join("")}`;
-  el.addEventListener("click", (e) => {
+    ${wealthCard(v.wealth)}
+    ${cardsCard(v.cards)}`;
+  el.onclick = (e) => {
     if (e.target.closest('[data-a="refresh"]')) ctx.refresh();
     if (e.target.closest('[data-a="cycle"]')) ctx.go("spend");
-    const j = e.target.closest('[data-a="joint"]');
-    if (j) j.closest(".card").classList.toggle("open");
-  });
+  };
 }
 
 const money2 = (n) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -85,7 +82,7 @@ function timelineCard(list) {
     <div class="tl mt6">${list.map(row).join("")}</div></div>`;
 }
 
-// 4 · own wealth: total, the split by bank, the big banks as tiles, the small ones (and foreign money) as lines.
+// 4 · wealth (the joint account included, tagged): total, the split by bank, the big banks as tiles, the small ones (and foreign money) as lines.
 function wealthCard(mine) {
   const big = mine.banks.filter((b) => b.invested > 0 && b.count > 0);
   const small = mine.banks.filter((b) => !big.includes(b) && b.total);
@@ -95,11 +92,11 @@ function wealthCard(mine) {
     ...b.reserved.map((r) => `Cofrinho ${brl(r.balance)}`),
   ].join(" · ");
   return `<div class="card">
-      <div class="label">Meu patrimônio</div>
+      <div class="label">Patrimônio</div>
       <div class="big">${brl(mine.total)}</div>
       <div class="stack">${stack}</div>
-      <div class="split">${big.map((b) => `<div class="tile"><span class="muted"><i class="bankdot" style="background:${BANKS[b.label]?.color}"></i>${esc(b.name)}</span><b>${mil(b.total)}</b><span class="muted">${b.cdiAvg ? `~${pct(b.cdiAvg, 0)} CDI · ` : ""}${b.count} ${b.count === 1 ? "título" : "títulos"}</span></div>`).join("")}</div>
-      ${small.length ? `<div class="list mt6">${small.map((b) => `<div><span class="l"><span><i class="bankdot" style="background:${BANKS[b.label]?.color || "var(--ink-3)"}"></i>${esc(b.name)}</span>${sub(b) ? `<small>${esc(sub(b))}</small>` : ""}</span><span class="muted">${brl(b.total, 2)}</span></div>`).join("")}</div>` : ""}
+      <div class="split">${big.map((b) => `<div class="tile"><span class="muted"><i class="bankdot" style="background:${BANKS[b.label]?.color}"></i>${esc(b.name)}${b.joint ? ' <span class="chip joint chip-s">conjunta</span>' : ""}</span><b>${mil(b.total)}</b><span class="muted">${b.cdiAvg ? `~${pct(b.cdiAvg, 0)} CDI · ` : ""}${b.count} ${b.count === 1 ? "título" : "títulos"}</span></div>`).join("")}</div>
+      ${small.length ? `<div class="list mt6">${small.map((b) => `<div><span class="l"><span><i class="bankdot" style="background:${BANKS[b.label]?.color || "var(--ink-3)"}"></i>${esc(b.name)}${b.joint ? ' <span class="chip joint chip-s">conjunta</span>' : ""}</span>${sub(b) ? `<small>${esc(sub(b))}</small>` : ""}</span><span class="muted">${brl(b.total, 2)}</span></div>`).join("")}</div>` : ""}
     </div>`;
 }
 
@@ -114,21 +111,11 @@ function cardsCard(cards) {
     </div></div>`;
 }
 
-// 6 · a joint account: total and one line; tap for the positions.
-function jointCard(j) {
-  const inv = j.holdings.banks.reduce((a, b) => a + b.invested, 0), cc = j.holdings.banks.reduce((a, b) => a + b.checking, 0);
-  const n = j.holdings.banks.reduce((a, b) => a + b.count, 0);
-  return `<div class="card joint-card">
-      <div class="row"><div><div class="label joint">${esc(j.title)}</div><div class="kpi">${mil(j.total)}</div></div><span class="chip joint">fora do meu total</span></div>
-      <button class="row muted sm mt6 joint-toggle" data-a="joint"><span>${n} ${n === 1 ? "título" : "títulos"} ${mil(inv)} · conta ${mil(cc)}</span><span class="caret">›</span></button>
-      <div class="list mt6 joint-more">${j.lines.map((l) => `<div><span class="l">${esc(l.name)}<small>${esc(l.meta)}</small></span><b>${mil(l.amount)}</b></div>`).join("")}</div>
-    </div>`;
-}
-
 function alertsCard(list) {
   if (!list.length) return "";
   const row = (a) => {
     if (a.kind === "bill") return `<div><span class="l">Fatura ${esc(a.bank)} ${a.days === 0 ? "vence hoje" : `vence em ${a.days} ${a.days === 1 ? "dia" : "dias"}`}<small>${ddmm(a.due)}</small></span><b>${brl(a.amount)}</b></div>`;
+    if (a.kind === "fgc") return `<div><span class="l">${esc(a.issuer)}: ${brl(a.amount)} acima do FGC<small>${brl(a.over)} além dos R$ 250 mil por emissor${a.joint ? " · inclui a conta conjunta" : ""} · mover o excedente para outro emissor</small></span><span class="chip bad">FGC</span></div>`;
     if (a.kind === "maturity") return `<div><span class="l">${esc(a.issuer)}${a.n > 1 ? ` ×${a.n}` : ""} vence em ${a.days} ${a.days === 1 ? "dia" : "dias"}<small>${a.scope === "joint" ? "conta conjunta · " : ""}${a.brb ? "não renovar no BRB" : `reinvestir em CDB ≥ ${a.cdbMin}% CDI ou liquidez diária`}</small></span><b>${brl(a.amount)}</b></div>`;
     return `<div><span class="l">${brl(a.amount)} parados na conta<small>${esc(a.bank)}${a.scope === "joint" ? " · conta conjunta" : ""} · investir o que passar da reserva</small></span><span class="chip warn">parado</span></div>`;
   };

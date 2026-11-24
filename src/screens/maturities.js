@@ -11,17 +11,16 @@ let calc = { cdb: 2, h: 2, lca: 84.5 };
 
 export function render(el, ctx) {
   if (needsSetup(el, ctx, "Vencimentos")) return;
-  const { mat } = ctx.view();
+  const { mat, guarantee } = ctx.view();
   const s = ctx.data.settings || {};
   const cdi = (s.cdi ?? 13.65) / 100;
   const cdbMin = s.cdbMin ?? 110;
-  const banks = (joint) => [...new Set(mat.rows.filter((r) => Boolean(r.joint) === joint).map((r) => bankName(r.bank)))].join(" + ");
-  const sub = [mat.total ? `${banks(false)} · ${mil(mat.total)}` : "", mat.jointTotal ? `${banks(true)} (conjunta) · ${mil(mat.jointTotal)}` : ""].filter(Boolean).join(" · ");
+  const sub = mat.total ? `${[...new Set(mat.rows.map((r) => bankName(r.bank) + (r.joint ? " (conjunta)" : "")))].join(" + ")} · ${mil(mat.total)}` : "";
 
   const v = ctx.view();
   // The ladder simulation takes a few hundred ms: computed once per data change, on first open of this tab.
-  const lad = (v.ladder ||= ladder(mat.rows.filter((r) => !r.joint), { today: v.today }));
-  const reserve = v.mine.banks.filter((b) => AUTO_RENEW_LABELS.includes(b.label)).reduce((a, b) => a + b.invested, 0);
+  const lad = (v.ladder ||= ladder(mat.rows, { today: v.today }));
+  const reserve = v.wealth.banks.filter((b) => AUTO_RENEW_LABELS.includes(b.label)).reduce((a, b) => a + b.invested, 0);
   el.innerHTML = `${header(ctx, "Vencimentos", `<button class="icon-btn" data-a="ics" aria-label="Adicionar vencimentos à agenda">${CAL_ICON}</button>`)}
     <div class="sub mb10">${esc(sub)}</div>
     ${lad.total ? ladderCard(lad, reserve) + planCard(lad) + aheadCard(lad) : ""}
@@ -33,6 +32,7 @@ export function render(el, ctx) {
       <div class="rule"><i class="r-ok">1</i><span><b>Liquidez primeiro</b> — dinheiro novo curto (≤ 12 meses) ou liquidez diária: entrada do financiamento.</span></div>
       <div class="rule"><i class="r-ok">2</i><span><b>CDB ≥ ${cdbMin}% CDI</b>, até R$ 250 mil por emissor (FGC).</span></div>
       ${mat.brbLast ? `<div class="rule"><i class="r-bad">✕</i><span><b>Sem BRB</b> — manter os atuais até ${ddmmyyyy(mat.brbLast)}.</span></div>` : ""}
+      ${fgcRules(guarantee)}
       ${mat.conc.map((c) => `<div class="rule"><i class="r-warn">!</i><span><b>${esc(c.issuer)} = ${pct(c.share * 100, 0)}</b> da ${esc(bankName(c.bank))}${c.joint ? " (conjunta)" : ""} — novos aportes em outros emissores.</span></div>`).join("")}
     </div>
     <div class="card">
@@ -145,4 +145,11 @@ function aheadCard(l) {
     <div class="row muted sm mt6"><span>Sem o plano</span><span>maior degrau ${pct(Math.max(...l.without) * 100, 0)}</span></div>${bars(l.without)}
     <div class="row muted sm mt8"><span>Seguindo o plano</span><span>maior degrau ${pct(Math.max(...l.with) * 100, 0)}</span></div>${bars(l.with)}
   </div>`;
+}
+
+// FGC: the largest issuers (at least 40% of the R$ 250 mil limit, up to 4), summed across every bank, the joint one included.
+function fgcRules(g) {
+  const big = (g?.issuers || []).filter((e) => e.share >= 0.4 || e.over).slice(0, Math.max(4, g.issuers.filter((e) => e.over).length));
+  if (!big.length) return "";
+  return big.map((e) => `<div class="rule"><i class="${e.over ? "r-bad" : e.share >= 0.9 ? "r-warn" : "r-ok"}">${e.over ? "✕" : e.share >= 0.9 ? "!" : "✓"}</i><span><b>${esc(e.issuer)}: ${mil(e.amount)}</b> de R$ 250 mil no FGC${e.banks.length > 1 || e.joint ? ` · ${e.banks.map((b) => bankName(b)).join(" + ")}${e.joint ? " (conjunta)" : ""}` : ""}${e.over ? ` — ${mil(e.amount - g.limit)} acima, mover para outro emissor` : e.share >= 0.9 ? " — perto do limite" : ""}.</span></div>`).join("");
 }

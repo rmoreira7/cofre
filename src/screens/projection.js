@@ -24,7 +24,7 @@ export function render(el, ctx) {
   const curve = steps.map((s) => [s, run(s)[y0]]);
 
   el.innerHTML = `${header(ctx, "Projeção")}
-    <div class="sub mb10">Patrimônio ${v.mine.banks.map((b) => b.name).join(" + ")}</div>
+    <div class="sub mb10">Patrimônio ${v.mine.banks.map((b) => b.name).join(" + ")}${v.wealth.banks.some((b) => b.joint) ? " · sem a conta conjunta (as premissas são suas)" : ""}</div>
     ${realityCard(ctx, v, p, target)}
     ${assumptionsCard(v, p, target)}
     <div class="card">
