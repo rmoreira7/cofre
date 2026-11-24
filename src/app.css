@@ -208,3 +208,16 @@ button.bar.g{padding:11px 0;margin:0;border-bottom:1px solid var(--line)}button.
 .switch::after{content:"";position:absolute;left:3px;top:3px;width:22px;height:22px;border-radius:50%;background:var(--surface);box-shadow:var(--shadow);transition:left .15s}
 .switch.on{background:var(--brand)}.switch.on::after{left:21px;background:#fff}
 small.block{display:block;font-weight:400}
+/* Projeção v2 */
+.hero-row{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.scn{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:6px;margin-top:12px}
+.scn button{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 7px;font:inherit;text-align:left;color:var(--ink-2);cursor:pointer}
+.scn button b{display:block;font-size:13px;color:var(--ink)}.scn button small{font-size:11.5px}
+.scn button.on{border-color:var(--brand);background:var(--brand-soft)}.scn button.on b{color:var(--brand)}
+.lg{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-2);margin-top:4px}
+.lg i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:5px;vertical-align:3px}.lg i.pt{width:7px;height:7px;border-radius:50%;background:var(--c-travel);vertical-align:1px}
+.ms{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+.ms th{font-weight:650;color:var(--ink-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;text-align:right;padding:4px 0}
+.ms th:first-child,.ms td:first-child{text-align:left}
+.ms td{padding:8px 0;border-top:1px solid var(--line);text-align:right}
+.ms tr.on td{color:var(--brand);font-weight:700}

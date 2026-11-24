@@ -1,10 +1,13 @@
-import { brl, mil, pct, ddmm } from "../lib/format.js";
-import { project, validParams, assumptions, reality, salaryAt } from "../lib/projection.js";
+import { brl, mil, pct, ddmm, MES } from "../lib/format.js";
+import { project, validParams, assumptions, reality, salaryAt, milestones, nextLevels } from "../lib/projection.js";
 import { bankName } from "../lib/model.js";
 import { header, needsSetup } from "./home.js";
 
 const MIN = 5000;
+const STEP = 1000; // the "each R$ X a month" rule of thumb
+const PLAN_SPEND = 7000; // the spending the original simulation assumed (projection.spend in the rules file overrides it)
 let chosen = null;
+let scenario = "real";
 
 export function render(el, ctx) {
   if (needsSetup(el, ctx, "Projeção")) return;
@@ -14,96 +17,120 @@ export function render(el, ctx) {
     el.innerHTML = `${header(ctx, "Projeção")}<div class="card empty"><b>Sem premissas</b>O arquivo de regras não traz os parâmetros da projeção.<br>Gere de novo no notebook com <code>projection.json</code> e importe em Ajustes.</div>`;
     return;
   }
-  const now = Math.max(MIN + 100, Math.ceil(v.avg3 / 100) * 100);
   const target = ctx.data.settings?.target ?? 7000;
-  if (chosen === null || chosen > now) chosen = Math.min(now, Math.max(MIN, target));
-  const run = (spend) => project(p, { start: v.mine.total, today: v.today, spend }).byYear;
+  const realSpend = Math.round(v.avg12 / 100) * 100;
+  // Ritmo real = the average of the closed cycles; Meta = the Gastos target; Plano = the original simulation's spending.
+  const planSpend = p.spend ?? PLAN_SPEND;
+  const scns = [["real", "Ritmo real", realSpend], ["meta", target === planSpend ? "Meta = plano" : "Meta", target], ["plan", "Plano", planSpend]]
+    .filter(([k, , sp], i, all) => all.findIndex((x) => x[2] === sp) === i);
+  if (!scns.some((x) => x[0] === scenario)) scenario = scns[0][0];
   const y0 = Number(v.today.slice(0, 4)) + 1, y1 = y0 + 1;
-  const base = run(now);
-  const steps = Array.from({ length: 21 }, (_, i) => MIN + ((now - MIN) * i) / 20);
-  const curve = steps.map((s) => [s, run(s)[y0]]);
+  const start = v.mine.total;
+  const run = (spend, untilYear = y1) => project(p, { start, today: v.today, spend, untilYear });
+  const max = Math.max(MIN + 100, Math.ceil(Math.max(realSpend, target) / 100) * 100);
+  if (chosen === null || chosen > max) chosen = Math.min(max, Math.max(MIN, target));
+  const perK = run(chosen).byYear[y0] - run(chosen + STEP).byYear[y0];
+  const levels = nextLevels(start);
+  const hits = scns.map(([k, label, sp]) => [k, label, milestones(run(sp, y0 + 3).path, levels)]);
+  const when = (m) => (m ? `${MES[Number(m.slice(5)) - 1]}/${m.slice(2, 4)}` : `após ${y0 + 3}`);
 
   el.innerHTML = `${header(ctx, "Projeção")}
     <div class="sub mb10">Patrimônio ${v.mine.banks.map((b) => b.name).join(" + ")}${v.wealth.banks.some((b) => b.joint) ? " · sem a conta conjunta (as premissas são suas)" : ""}</div>
-    ${realityCard(ctx, v, p, target)}
-    ${assumptionsCard(v, p, target)}
     <div class="card">
-      <div class="label">Se eu gastar por mês</div>
+      <div class="label">Fim de ${y0}</div>
+      <div class="hero-row"><span class="big" data-o="hv"></span><span class="strong sm" data-o="hg"></span></div>
+      <div class="muted sm" data-o="hs"></div>
+      <div class="scn">${scns.map(([k, label, sp]) => `<button data-s="${k}" class="${k === scenario ? "on" : ""}"><b>${label}</b><small>${mil(sp)}/mês</small></button>`).join("")}</div>
+      <svg data-o="chart" viewBox="0 0 340 170" class="mt10" role="img" aria-label="Patrimônio projetado por cenário até dezembro de ${y1}"></svg>
+      <div class="lg"><span><i style="background:var(--brand)"></i>cenário escolhido</span><span><i style="background:var(--ink-3)"></i>outros</span><span><i class="pt"></i>real</span></div>
+    </div>
+    <div class="card">
+      <div class="label">Marcos</div>
+      <table class="ms"><tr><th></th>${levels.map((l) => `<th>${l / 1000} mil</th>`).join("")}</tr>
+        ${hits.map(([k, label, h]) => `<tr data-row="${k}"><td>${label}</td>${h.map((x) => `<td>${when(x.month)}</td>`).join("")}</tr>`).join("")}</table>
+    </div>
+    <div data-o="real"></div>
+    <div class="card">
+      <div class="label">E se eu gastar por mês</div>
       <div class="kpi" data-o="spend"></div>
-      <input type="range" data-i="spend" min="${MIN}" max="${now}" step="100" value="${chosen}" aria-label="Gasto mensal">
-      <div class="row muted"><span>${mil(MIN)}</span><span>hoje ≈ ${mil(now)} <small>(média 3 meses)</small></span></div>
+      <input type="range" data-i="spend" min="${MIN}" max="${max}" step="100" value="${chosen}" aria-label="Gasto mensal">
+      <div class="row muted sm"><span>${mil(MIN)}</span><span>ritmo real ${mil(realSpend)}</span></div>
       <div class="split">
         <div class="tile"><span class="muted">Fim de ${y0}</span><b data-o="y0"></b></div>
         <div class="tile"><span class="muted">Fim de ${y1}</span><b data-o="y1"></b></div>
       </div>
-      <div class="muted mt10" data-o="delta"></div>
+      <div class="muted mt10">Cada <b class="ink">${brl(STEP)} a menos</b> por mês = <b class="ok">+${mil(perK)}</b> no fim de ${y0}.</div>
     </div>
-    <div class="card">
-      <div class="label">Curva · fim de ${y0}</div>
-      <svg data-o="curve" viewBox="0 0 340 170" class="mt8" role="img" aria-label="Patrimônio no fim de ${y0} por gasto mensal"></svg>
-      <div class="muted">${assumptions(p)} · parte de ${brl(v.mine.total)} hoje</div>
-    </div>`;
+    ${assumptionsCard(v, p, target)}
+    <div class="muted sm">${assumptions(p)} · parte de ${brl(start)} hoje</div>`;
 
   const out = (k) => el.querySelector(`[data-o="${k}"]`);
-  const W = 340, H = 170, m = { l: 8, r: 8, t: 14, b: 26 };
-  const lo = Math.min(...curve.map((c) => c[1])), hi = Math.max(...curve.map((c) => c[1]));
-  const x = (s) => m.l + ((s - MIN) / (now - MIN)) * (W - m.l - m.r);
-  const y = (val) => m.t + (1 - (val - lo) / (hi - lo || 1)) * (H - m.t - m.b);
-  const pts = curve.map(([s, val]) => `${x(s)},${y(val)}`).join(" ");
-
+  const series = (() => { const m = new Map(); for (const w of ctx.data.rules?.wealth || []) m.set(w.d, w); for (const w of ctx.data.wealthLog || []) m.set(w.d, w); return [...m.values()]; })();
   const paint = () => {
-    const r = run(chosen);
+    const [, label, sp] = scns.find((x) => x[0] === scenario);
+    const r = run(sp).byYear[y0];
+    el.querySelectorAll("[data-s]").forEach((b) => b.classList.toggle("on", b.dataset.s === scenario));
+    el.querySelectorAll("[data-row]").forEach((t) => t.classList.toggle("on", t.dataset.row === scenario));
+    out("hv").textContent = mil(r);
+    const gap = r - run(planSpend).byYear[y0];
+    out("hg").innerHTML = sp === planSpend ? '<span class="muted">o plano do arquivo</span>' : `<span class="${gap >= 0 ? "ok" : "bad"}">${gap >= 0 ? "+" : "−"}${mil(Math.abs(gap)).replace("−", "")} vs. plano</span>`;
+    out("hs").textContent = `Gastando ${brl(sp)}/mês a partir do próximo mês · hoje ${mil(start)}`;
+    const rr = reality(p, series, { spend: sp, from: p.from, today: v.today });
+    out("chart").innerHTML = chart(scns, scenario, run, start, v.today, y1, rr);
+    out("real").innerHTML = realityCard(rr, label);
+  };
+  const slide = () => {
+    const r = run(chosen).byYear;
     out("spend").textContent = brl(chosen);
     out("y0").textContent = mil(r[y0]);
     out("y1").textContent = mil(r[y1]);
-    const d0 = r[y0] - base[y0], d1 = r[y1] - base[y1];
-    out("delta").innerHTML = chosen === now ? "No ritmo de hoje." : `vs. hoje: <b class="ok">+${mil(d0)}</b> em ${y0} · <b class="ok">+${mil(d1)}</b> em ${y1}`;
-    out("curve").innerHTML = `<polyline points="${pts}" fill="none" stroke="var(--brand)" stroke-width="3" stroke-linejoin="round"/>
-      <line x1="${x(chosen)}" x2="${x(chosen)}" y1="${m.t}" y2="${H - m.b}" stroke="var(--ink-3)" stroke-dasharray="3 4"/>
-      <circle cx="${x(chosen)}" cy="${y(r[y0])}" r="6" fill="var(--brand)" stroke="var(--surface)" stroke-width="3"/>
-      <circle cx="${x(now)}" cy="${y(base[y0])}" r="4" fill="var(--ink-3)"/>
-      <text x="${x(now)}" y="${y(base[y0]) - 10}" text-anchor="end" font-size="10.5" fill="var(--ink-3)">hoje</text>
-      <text x="${m.l}" y="${H - 6}" font-size="10.5" fill="var(--ink-3)">${mil(MIN).replace(",0 mil", "k").replace(" mil", "k")}</text>
-      <text x="${W - m.r}" y="${H - 6}" text-anchor="end" font-size="10.5" fill="var(--ink-3)">${mil(now).replace(" mil", "k")}</text>`;
   };
-  el.querySelector('[data-i="spend"]').addEventListener("input", (e) => { chosen = Number(e.target.value); paint(); });
-  el.addEventListener("click", (e) => { if (e.target.closest('[data-a="refresh"]')) ctx.refresh(); });
+  el.querySelector('[data-i="spend"]').addEventListener("input", (e) => { chosen = Number(e.target.value); slide(); });
+  el.onclick = (e) => {
+    if (e.target.closest('[data-a="refresh"]')) ctx.refresh();
+    const b = e.target.closest("[data-s]");
+    if (b) { scenario = b.dataset.s; paint(); }
+  };
   paint();
+  slide();
 }
 
-// Real × projetado: the plan (target spending) from the projection's start date against what happened, same banks.
-function realityCard(ctx, v, p, target) {
-  const byDay = new Map();
-  for (const w of ctx.data.rules?.wealth || []) byDay.set(w.d, w);
-  for (const w of ctx.data.wealthLog || []) byDay.set(w.d, w);
-  const r = reality(p, [...byDay.values()], { spend: target, from: p.from, today: v.today });
-  if (!r || r.actual.length < 2) return `<div class="card"><div class="label">Real × projetado</div><div class="muted mt6">Começa a comparar a partir da próxima atualização.</div></div>`;
-  const W = 340, H = 150, m = { l: 6, r: 6, t: 12, b: 22 };
-  const endD = r.knots.find((k) => k.d >= v.today && k.d > r.today.d)?.d || r.knots.at(-1).d;
-  const ks = r.knots.filter((k) => k.d <= endD);
+// Every scenario to December of `y1`, the chosen one in brand; the real points (since the projection's start) first.
+function chart(scns, chosen, run, start, today, y1, rr) {
+  const W = 340, H = 170, m = { l: 4, r: 40, t: 20, b: 22 };
   const ms = (d) => Date.parse(d + "T12:00:00Z");
-  const vals = [...ks.map((k) => k.v), ...r.actual.map((a) => a.real)];
-  const lo = Math.min(...vals), hi = Math.max(...vals);
-  const x = (d) => m.l + ((ms(d) - ms(r.from)) / (ms(endD) - ms(r.from) || 1)) * (W - m.l - m.r);
+  const from = rr?.from && rr.from < today ? rr.from : today, to = `${y1}-12-31`;
+  const end = (mo) => { const [y, mm] = mo.split("-").map(Number); return `${mo}-${String(new Date(Date.UTC(y, mm, 0)).getUTCDate()).padStart(2, "0")}`; };
+  const lines = scns.map(([k, label, sp]) => [k, label, [{ d: today, v: start }, ...run(sp).path.map((q) => ({ d: end(q.month), v: q.worth }))]]);
+  const vals = [...lines.flatMap((l) => l[2].map((q) => q.v)), ...(rr?.actual || []).map((a) => a.real)];
+  const lo = Math.min(...vals) * 0.97, hi = Math.max(...vals);
+  const x = (d) => m.l + ((ms(d) - ms(from)) / (ms(to) - ms(from))) * (W - m.l - m.r);
   const y = (val) => m.t + (1 - (val - lo) / (hi - lo || 1)) * (H - m.t - m.b);
-  const proj = ks.map((k) => `${x(k.d)},${y(k.v)}`).join(" ");
-  const real = r.actual.map((a) => `${x(a.d)},${y(a.real)}`).join(" ");
+  let g = "";
+  for (const k of nextLevels(lo, 6).filter((k) => k <= hi)) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(k)}" y2="${y(k)}" stroke="var(--line)"/><text x="${W - m.r + 4}" y="${y(k) + 3}" font-size="9.5" fill="var(--ink-3)">${k / 1000}k</text>`;
+  for (const [k, label, pts] of [...lines].sort((a, b) => (a[0] === chosen) - (b[0] === chosen))) {
+    const on = k === chosen, last = pts.at(-1);
+    g += `<polyline points="${pts.map((q) => `${x(q.d)},${y(q.v)}`).join(" ")}" fill="none" stroke="var(${on ? "--brand" : "--ink-3"})" stroke-width="${on ? 3 : 1.5}" opacity="${on ? 1 : 0.55}" stroke-linejoin="round"/>
+      <text x="${x(last.d) - 2}" y="${y(last.v) - 5}" text-anchor="end" font-size="9.5" font-weight="${on ? 700 : 400}" fill="var(${on ? "--brand" : "--ink-3"})">${label}</text>`;
+  }
+  for (const a of rr?.actual || []) g += `<circle cx="${x(a.d)}" cy="${y(a.real)}" r="3" fill="var(--c-travel)"><title>${ddmm(a.d)} · ${brl(a.real)}</title></circle>`;
+  const t = (d, lab, anchor) => `<text x="${x(d)}" y="${H - 6}" text-anchor="${anchor}" font-size="10" fill="var(--ink-3)">${lab}</text>`;
+  g += t(from, `${MES[Number(from.slice(5, 7)) - 1]}/${from.slice(2, 4)}`, "start") + t(`${y1 - 1}-12-31`, `dez/${String(y1 - 1).slice(2)}`, "middle") + t(to, `dez/${String(y1).slice(2)}`, "end");
+  return g;
+}
+
+// Real × projetado: the chosen scenario from the projection's start date against what happened, same banks.
+function realityCard(r, label) {
+  if (!r || r.actual.length < 2) return `<div class="card"><div class="label">Real × projetado</div><div class="muted mt6">Começa a comparar a partir da próxima atualização.</div></div>`;
   const g = r.gap;
   return `<div class="card">
       <div class="row"><div class="label">Real × projetado</div><span class="muted sm">desde ${ddmm(r.from)}</span></div>
       <div class="split">
-        <div class="tile"><span class="muted">Real hoje</span><b>${mil(r.today.real)}</b><span class="muted sm">${brl(r.today.real - r.start)} desde ${ddmm(r.from)}</span></div>
-        <div class="tile"><span class="muted">Projetado</span><b>${mil(r.today.projected)}</b><span class="muted sm">no plano (gasto ${brl(target)})</span></div>
+        <div class="tile"><span class="muted">Real hoje</span><b>${mil(r.today.real)}</b><span class="muted sm">${r.today.real >= r.start ? "+" : "−"}${brl(Math.abs(r.today.real - r.start))} desde ${ddmm(r.from)}</span></div>
+        <div class="tile"><span class="muted">No cenário</span><b>${mil(r.today.projected)}</b><span class="muted sm">${label.toLowerCase()}</span></div>
       </div>
-      <div class="mt8 ${g >= 0 ? "ok" : "bad"} strong">${g >= 0 ? "À frente" : "Atrás"} do plano em ${brl(Math.abs(g))}</div>
-      <svg viewBox="0 0 ${W} ${H}" class="mt8" role="img" aria-label="Patrimônio real e projetado">
-        <polyline points="${proj}" fill="none" stroke="var(--ink-3)" stroke-width="2" stroke-dasharray="5 5"/>
-        <polyline points="${real}" fill="none" stroke="var(--brand)" stroke-width="3" stroke-linejoin="round"/>
-        ${r.actual.map((a) => `<circle cx="${x(a.d)}" cy="${y(a.real)}" r="3.5" fill="var(--brand)"><title>${ddmm(a.d)} · real ${brl(a.real)} · projetado ${brl(a.projected)}</title></circle>`).join("")}
-        <text x="${m.l}" y="${H - 6}" font-size="10.5" fill="var(--ink-3)">${ddmm(r.from)}</text>
-        <text x="${W - m.r}" y="${H - 6}" text-anchor="end" font-size="10.5" fill="var(--ink-3)">${ddmm(endD)}</text>
-      </svg>
-      <div class="muted sm">Linha cheia: real · tracejada: projeção. Mesmos bancos de ${ddmm(r.from)} (${r.banks.map(bankName).join(" + ")})${r.extra.length ? `; ${r.extra.map(bankName).join(" e ")} ${r.extra.length > 1 ? "entraram depois e ficam" : "entrou depois e fica"} fora da comparação` : ""}. O mês em curso só ganha rendimento na projeção; entradas e gastos dele contam a partir do fechamento.</div>
+      <div class="mt8 ${g >= 0 ? "ok" : "bad"} strong">${g >= 0 ? "À frente" : "Atrás"} em ${brl(Math.abs(g))}</div>
+      <div class="muted sm mt6">Mesmos bancos de ${ddmm(r.from)} (${r.banks.map(bankName).join(" + ")})${r.extra.length ? `; ${r.extra.map(bankName).join(" e ")} ${r.extra.length > 1 ? "entraram depois e ficam" : "entrou depois e fica"} fora` : ""}. O mês em curso só rende na projeção: salário e fatura dele contam no fechamento, então a diferença oscila até lá.</div>
     </div>`;
 }
 
@@ -124,6 +151,5 @@ function assumptionsCard(v, p, target) {
       ${line(`Gasto / mês <span class="muted sm">(média ${v.avgN} meses)</span>`, target, v.avg12, (n) => brl(n), (r, a) => r <= a * 1.03)}
       ${line("Rendimento (% do CDI)", p.cdi_pct, realCdi, (n) => pct(n, 0), (r, a) => r >= a - 1)}
     </div>
-    ${v.avg12 > target * 1.03 ? `<div class="muted sm mt6">No ritmo real de gastos (${brl(v.avg12)}), arraste o controle abaixo até "hoje" para ver onde isso leva.</div>` : ""}
   </div>`;
 }

@@ -57,3 +57,11 @@ test("reality: projection from the start date vs actual, same banks only; interp
   const dec = r.knots.find((k) => k.d === "2026-12-31");
   assert.ok(Math.abs(dec.v - (r.knots[1].v * (1 + ((1.12) ** (1 / 12) - 1)) + 10000 - 5000)) < 1e-6);
 });
+
+test("milestones: first month each level is reached; null beyond the path; nextLevels above today", async () => {
+  const { milestones, nextLevels } = await import("../src/lib/projection.js");
+  const path = [{ month: "2027-01", worth: 290 }, { month: "2027-02", worth: 310 }, { month: "2027-03", worth: 405 }];
+  assert.deepEqual(milestones(path, [300, 400, 500]), [{ level: 300, month: "2027-02" }, { level: 400, month: "2027-03" }, { level: 500, month: null }]);
+  assert.deepEqual(nextLevels(278711), [300000, 400000, 500000]);
+  assert.deepEqual(nextLevels(300000), [400000, 500000, 600000]);
+});

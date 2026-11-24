@@ -90,3 +90,14 @@ export function reality(p, series, { spend, from, today, untilYear }) {
   const last = actual.at(-1);
   return { from: base.d, banks, start, knots, actual, today: last, gap: last.real - last.projected, extra: Object.keys(pts.at(-1).banks).filter((k) => !banks.includes(k)) };
 }
+
+// The first month each level is reached on a projected path ([{ month, worth }]); null = not within the path.
+export function milestones(path, levels) {
+  return levels.map((level) => ({ level, month: path.find((q) => q.worth >= level)?.month || null }));
+}
+
+// The next `n` round levels (every `step`) above today's worth.
+export function nextLevels(start, n = 3, step = 100000) {
+  const first = Math.floor(start / step) * step + step;
+  return Array.from({ length: n }, (_, i) => first + i * step);
+}
