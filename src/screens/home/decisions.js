@@ -3,6 +3,7 @@
 import { brl, ddmm, esc, pct } from "../../lib/format.js";
 import { bankName } from "../../lib/model.js";
 import { decide, undo } from "../../lib/decisions.js";
+import { forget } from "../../lib/sync.js";
 
 export const id = "decisions";
 export const label = (t) => (t.board.open.length ? `Decisões · ${t.board.open.length}` : "Decisões");
@@ -12,19 +13,28 @@ const money = (n) => brl(n, Math.abs(n) < 100 ? 2 : 0);
 const dmy = (iso) => `${ddmm(iso)}/${iso.slice(2, 4)}`;
 const left = (d) => (d.days < 0 ? `venceu há ${-d.days} ${d.days === -1 ? "dia" : "dias"}` : d.days === 0 ? "hoje" : d.days === 1 ? "amanhã" : `em ${d.days} dias`);
 
-export function render(t) {
+export function render(t, ctx) {
   const { open, snoozed, decided } = t.board;
-  return `${openCard(open)}${upcomingCard(t.upcoming)}${decidedCard(decided, t.today)}${snoozedCard(snoozed)}`;
+  return `${openCard(open)}${upcomingCard(t.upcoming)}${decidedCard(decided, t.today)}${snoozedCard(snoozed)}${syncLine(ctx)}`;
 }
+
+// Where these decisions come from: this phone only, or merged with the Telegram buttons (rules.sync). main.js
+// refreshes this line in place when a sync ends without changing anything.
+export function syncText(s) {
+  const hm = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  if (!s) return "Sincronizando com o Telegram…";
+  if (s.err) return `Telegram: não sincronizou às ${hm(s.at)} (${s.err})`;
+  return s.write ? `Sincronizado com o Telegram às ${hm(s.at)}` : `Lendo o Telegram às ${hm(s.at)} · o app ainda não envia (falta o token do gist)`;
+}
+const syncLine = (ctx) => (ctx?.data?.rules?.sync ? `<div class="muted sm mt6" data-syncline>${esc(syncText(ctx.sync))}</div>` : "");
 
 export function bind(pane, t, ctx, { rerender }) {
   pane.onclick = async (e) => {
     const b = e.target.closest("[data-act]");
     if (!b) return;
     const { act, d: id } = b.dataset;
-    const records = ctx.data.decisions || {};
-    let next;
-    if (act === "undo") next = undo(records, id);
+    let apply;
+    if (act === "undo") apply = (data) => ({ ...data, decisions: undo(data.decisions, id), undone: forget(data.undone, id) });
     else {
       const d = t.board.open.find((x) => x.id === id);
       if (!d) return;
@@ -33,10 +43,11 @@ export function bind(pane, t, ctx, { rerender }) {
         note = prompt("O que você fez em vez da sugestão?", "")?.trim();
         if (!note) return;
       }
-      next = decide(records, d, act, { today: t.today, note });
+      apply = (data) => ({ ...data, decisions: decide(data.decisions, d, act, { today: t.today, note, by: "app" }) });
     }
-    await ctx.save({ ...ctx.data, decisions: next });
+    await ctx.update(apply);
     rerender();
+    ctx.syncNow?.();
   };
 }
 
@@ -95,7 +106,7 @@ function decidedCard(list, today) {
   const n = (s) => list.filter((r) => r.outcome.state === s).length;
   return `<div class="card"><div class="row"><div class="label">Decididas</div><span class="muted sm">os dados confirmam?</span></div>
     <div class="kpis"><div><span class="muted sm">Confirmadas</span><b class="ok">${n("ok")}</b></div><div><span class="muted sm">Aguardando</span><b class="warn">${n("wait")}</b></div><div><span class="muted sm">Não achadas</span><b>${n("no")}</b></div></div>
-    <div class="mt6">${list.slice(0, 12).map((r) => `<div class="out"><i class="${r.outcome.state}">${ICON[r.outcome.state]}</i><div class="t">${esc(r.d.title)}${r.d.amount != null ? ` · ${brl(r.d.amount)}` : ""}<small>${r.status === "other" ? "Decidido" : r.d.kind === "bill" ? "Paga" : "Feito"} em ${ddmm(r.at)} · ${outcomeText(r, today)}</small></div><button class="lnk muted" data-act="undo" data-d="${esc(r.id)}">Desfazer</button></div>`).join("")}</div>
+    <div class="mt6">${list.slice(0, 12).map((r) => `<div class="out"><i class="${r.outcome.state}">${ICON[r.outcome.state]}</i><div class="t">${esc(r.d.title)}${r.d.amount != null ? ` · ${brl(r.d.amount)}` : ""}<small>${r.status === "other" ? "Decidido" : r.d.kind === "bill" ? "Paga" : "Feito"} em ${ddmm(r.at)}${r.by === "telegram" ? " pelo Telegram" : ""} · ${outcomeText(r, today)}</small></div><button class="lnk muted" data-act="undo" data-d="${esc(r.id)}">Desfazer</button></div>`).join("")}</div>
   </div>`;
 }
 

@@ -3,6 +3,7 @@
 // Logs carry counts only, never amounts or names.
 // env: PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET, PLUGGY_ITEMS ("label:id,…"), COFRE_ENTITIES (rules.entities JSON),
 //      TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, COFRE_STATE_KEY + STATE_PATH (buttons; without them, plain messages),
+//      COFRE_PHONE_GIST (optional: the phone's decisions, merged in),
 //      OPENAI_API_KEY (optional: explanations), OPENAI_MODEL, COFRE_RENEWALS (optional JSON list),
 //      DRY_RUN=1 (print instead of send), FORCE_DIGEST=1 (treat today as Monday), TODAY=YYYY-MM-DD (test a date).
 import { createPluggy } from "../src/lib/pluggy.js";
@@ -13,7 +14,8 @@ import { view, decide, decisionText, digest } from "./decide.mjs";
 import { explain, MODEL } from "./explain.mjs";
 import { createTelegram } from "./telegram.mjs";
 import { load, save, EMPTY } from "./state.mjs";
-import { applyTaps, buttons, pruneMessages } from "./taps.mjs";
+import { applyTaps, syncMessages, buttons, pruneMessages, sig } from "./taps.mjs";
+import { pullPhone } from "./phone.mjs";
 
 const need = (k) => process.env[k] || (console.error(`missing ${k}`), process.exit(2));
 const dry = process.env.DRY_RUN === "1";
@@ -74,8 +76,10 @@ const statePath = process.env.STATE_PATH, stateKey = process.env.COFRE_STATE_KEY
 const withState = Boolean(statePath && stateKey);
 const state = withState ? await load(statePath, stateKey) : structuredClone(EMPTY);
 
-// 1 · taps since the last run (the taps workflow normally got them already)
+// 1 · taps since the last run (the taps workflow normally got them already), and what was decided on the phone
 if (withState && tg) console.log(`taps: ${await applyTaps(state, tg, { chatId: need("TELEGRAM_CHAT_ID"), today })}`);
+if (withState) console.log(`phone: ${await pullPhone(state, { gist: process.env.COFRE_PHONE_GIST, key: stateKey })}`);
+if (withState && tg) console.log(`edited: ${await syncMessages(state, tg)}`);
 
 const pulled = await createPluggy({ clientId: need("PLUGGY_CLIENT_ID"), clientSecret: need("PLUGGY_CLIENT_SECRET") }).pullAll(items);
 const failed = pulled.items.filter((i) => i.error).length;
@@ -122,7 +126,7 @@ if (dry) {
     const text = decisionText(u);
     const n = withState ? ++state.seq : null;
     const m = await tg.send(text, withState ? buttons(n) : null);
-    if (withState) state.messages[n] = { id: u.id, d: u.d, text, at: today, mid: m.message_id };
+    if (withState) state.messages[n] = { id: u.id, d: u.d, text, at: today, mid: m.message_id, seen: sig(state, u.id) };
   }
   if (week) await tg.send(week);
   console.log("sent");

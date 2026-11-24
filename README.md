@@ -33,6 +33,15 @@ file. Decision ids are the app's (`src/lib/decisions.js`). This is
 the one place data leaves the phone: the message text goes through Telegram. Credentials live only in the repo's
 Actions secrets, and the logs carry counts only.
 
+**Phone ↔ Telegram.** The app's Início › Decisões and the Telegram buttons are the same decisions (same ids),
+merged per decision: the latest change wins, an undo included (kept as a timestamped tombstone so it travels too,
+`src/lib/sync.js`). The phone reads the watcher's `state.enc` through the GitHub API (public ciphertext, no token) and
+writes its own `phone.enc` to a **secret gist** with a fine-grained token that has only *Gists: read and write*: it
+can touch no repository, so a leaked phone token can never change the code Pages serves. The watcher reads the gist
+(`COFRE_PHONE_GIST`) on every taps and daily run and edits each message whose decision changed on the phone. One
+writer per file: the watcher writes only `state.enc`, the phone only `phone.enc`. The key, the gist id and the
+token reach the phone inside the rules file (`sync`), never typed in.
+
 With `OPENAI_API_KEY` set, each maturity message gets a one- or two-sentence explanation (`watch/explain.mjs`,
 Responses API, `store: false`). OpenAI receives only that decision's facts as the rules computed them (issuer,
 amount, date, suggested split, which ladder rungs are below and above the target, CDI cost per business day). The

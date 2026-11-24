@@ -41,6 +41,7 @@ jobs:
           FORCE_DIGEST: ${{ inputs.digest && '1' || '' }}
           TODAY: ${{ inputs.today }}
           COFRE_STATE_KEY: ${{ secrets.COFRE_STATE_KEY }}
+          COFRE_PHONE_GIST: ${{ secrets.COFRE_PHONE_GIST }}
           STATE_PATH: state/state.enc
       - if: ${{ !inputs.today }} # a test date must not touch the real state
         run: scripts/state-branch.sh push

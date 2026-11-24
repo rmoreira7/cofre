@@ -6,13 +6,16 @@ import { slim, holdings, primaryEntity, bankName, shouldAutoRefresh } from "./li
 import { localToday } from "./lib/format.js";
 import { logPositions } from "./lib/income.js";
 import { buildView } from "./lib/view.js";
+import { merge, same, canon } from "./lib/sync.js";
+import { pullWatcher, pushPhone } from "./lib/remote.js";
 import * as home from "./screens/home/index.js";
+import { syncText } from "./screens/home/decisions.js";
 import * as spend from "./screens/spend/index.js";
 import * as investments from "./screens/investments/index.js";
 import * as projection from "./screens/projection/index.js";
 import * as settings from "./screens/settings/index.js";
 
-export const APP_VERSION = "0.17.0";
+export const APP_VERSION = "0.18.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, investments, projection, settings };
 
@@ -23,7 +26,7 @@ const bio = createBio(idbStorage("cofre", "vault", "bio"), {
   credentials: navigator.credentials, rpId: location.hostname,
   isAvailable: () => window.PublicKeyCredential?.isUserVerifyingPlatformAuthenticatorAvailable?.() ?? false,
 });
-const state = { data: null, current: "home", view: null, progress: "", busy: false, bio: { available: false, enrolled: false }, sub: loadSubs() };
+const state = { data: null, current: "home", view: null, progress: "", busy: false, bio: { available: false, enrolled: false }, sub: loadSubs(), sync: null };
 
 // The last sub-tab of each tab: a per-device convenience, so it lives in localStorage (and works without it).
 function loadSubs() { try { return JSON.parse(localStorage.getItem("cofre.sub") || "{}"); } catch { return {}; } }
@@ -34,7 +37,10 @@ const ctx = {
   get data() { return state.data; },
   get progress() { return state.progress; },
   get busy() { return state.busy; },
-  async save(data) { await vault.save(data); state.data = data; state.view = null; },
+  save: (data) => update(() => data),
+  update,
+  syncNow: () => syncDecisions({ force: true }),
+  get sync() { return state.sync; },
   view: () => (state.view ||= buildView(state.data, localToday())),
   refresh,
   async setOverride(k, category) {
@@ -52,6 +58,57 @@ const ctx = {
   async disableBio() { await bio.clear(); state.bio.enrolled = false; go("settings"); },
 };
 
+// Vault writes run one at a time; update(fn) builds the new data from the latest saved one, so a background sync
+// never writes back data from before a tap made meanwhile.
+let saving = Promise.resolve();
+function update(fn) {
+  const run = saving.then(async () => {
+    const data = fn(state.data);
+    if (data === state.data) return;
+    await vault.save(data);
+    state.data = data; state.view = null;
+  });
+  saving = run.catch(() => {});
+  return run;
+}
+
+// Decisions ↔ Telegram (rules.sync, from the laptop's rules file): read the watcher's state, merge (latest change wins),
+// and write the result to the phone's gist when it changed and the file carries a gist token. On unlock, on return
+// to the app (at most once a minute), and after each decision. state.sync: { at, err, write } for Decisões.
+let syncing = null, lastSync = 0, again = false;
+function syncDecisions({ force = false } = {}) {
+  const cfg = state.data?.rules?.sync;
+  if (!cfg?.key) return Promise.resolve();
+  if (syncing) { again ||= force; return syncing; } // a decision made mid-sync is sent by a second pass
+  if (!force && Date.now() - lastSync < 6e4) return Promise.resolve();
+  lastSync = Date.now();
+  syncing = (async () => {
+    let m, changed = false;
+    try {
+      const w = await pullWatcher({ repo: cfg.repo, key: cfg.key });
+      await update((d) => {
+        const local = { decisions: d.decisions || {}, undone: d.undone || {} };
+        m = merge([local, w]);
+        changed = !same(local, m);
+        return changed ? { ...d, ...m } : d;
+      });
+      const h = canon(m);
+      if (cfg.gist && cfg.token && h !== state.data.syncPushed) {
+        await pushPhone({ gist: cfg.gist, token: cfg.token, key: cfg.key, value: { v: 1, ...m } });
+        await update((d) => ({ ...d, syncPushed: h }));
+      }
+      state.sync = { at: new Date(), err: null, write: Boolean(cfg.gist) };
+    } catch (e) {
+      state.sync = { at: new Date(), err: e.message, write: Boolean(cfg.gist) };
+    } finally {
+      syncing = null;
+    }
+    if (changed && state.current === "home") go("home");
+    else { const l = document.querySelector("[data-syncline]"); if (l) l.textContent = syncText(state.sync); }
+    if (again) { again = false; return syncDecisions({ force: true }); }
+  })();
+  return syncing;
+}
 
 // BRL rates for the foreign-currency balances (Wise). Only currency codes leave the device. On failure the previous
 // rates stay (marked with their own date); with none, those balances count as 0 until a rate is fetched.
@@ -115,7 +172,7 @@ async function refresh() {
     const h = me ? holdings(next, state.data.rules, me) : null;
     const log = (state.data.wealthLog || []).filter((w) => w.d !== localToday());
     if (h) log.push({ d: localToday(), banks: Object.fromEntries(h.banks.map((b) => [b.label, Math.round(b.total * 100) / 100])) });
-    await ctx.save({ ...state.data, snapshot: next, wealthLog: log, invLog: logPositions(state.data.invLog, next, localToday()) });
+    await update((d) => ({ ...d, snapshot: next, wealthLog: log, invLog: logPositions(d.invLog, next, localToday()) }));
     state.busy = false;
     say(failed.length ? `Falhou: ${failed.map((f) => bankName(f.label)).join(", ")} (mantidos os dados anteriores)` : "");
   } catch (e) {
@@ -256,6 +313,7 @@ function enter() {
   tabs.hidden = false;
   go(state.current);
   maybeRefresh();
+  syncDecisions();
 }
 
 // At most one automatic attempt per 15 min, so a failing bank or no signal doesn't retry on every app switch.
@@ -271,7 +329,7 @@ let hiddenAt = 0;
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) hiddenAt = Date.now();
   else if (vault.unlocked && hiddenAt && Date.now() - hiddenAt > AUTO_LOCK_MS) lock();
-  else if (vault.unlocked) maybeRefresh();
+  else if (vault.unlocked) { maybeRefresh(); syncDecisions(); }
 });
 // Sub-tabs switch in place (every pane is already rendered, only one shown); a [data-go="tab:sub"] link opens another tab.
 app.addEventListener("click", (e) => {

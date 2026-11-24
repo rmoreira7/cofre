@@ -1,6 +1,7 @@
 // Transaction categorizer: a port of finance/pluggy/categories.py, generic rules only.
 // Everything personal (payee rules, learned merchant map, overrides) arrives in the imported rules file.
 import { validRenewals } from "./decisions.js";
+import { validKey } from "./seal.js";
 
 export const RULES_FORMAT = "cofre-rules";
 export const RULES_VERSION = 1;
@@ -100,6 +101,11 @@ export function parseRulesFile(text) {
     if (!ok) throw new Error("Histórico de patrimônio inválido.");
   }
   if (raw.renewals != null && !validRenewals(raw.renewals)) throw new Error("Lista de renovações inválida.");
+  if (raw.sync != null) {
+    const s = raw.sync;
+    const ok = s && validKey(s.key) && /^[\w.-]+\/[\w.-]+$/.test(s.repo || "") && (s.gist == null || (/^[0-9a-f]{20,40}$/.test(s.gist) && /^github_pat_\w+$/.test(s.token || "")));
+    if (!ok) throw new Error("Configuração de sincronização inválida.");
+  }
   if (raw.invHistory != null) {
     const ok = Array.isArray(raw.invHistory) && raw.invHistory.every((e) => e?.v === 2 && /^\d{4}-\d{2}-\d{2}$/.test(e.d) && e.p && typeof e.p === "object"
       && Object.values(e.p).every((x) => Array.isArray(x) && Number.isFinite(x[0]) && Number.isFinite(x[1]) && typeof x[3] === "string"));

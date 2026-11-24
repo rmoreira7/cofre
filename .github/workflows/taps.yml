@@ -25,6 +25,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           COFRE_STATE_KEY: ${{ secrets.COFRE_STATE_KEY }}
+          COFRE_PHONE_GIST: ${{ secrets.COFRE_PHONE_GIST }}
           STATE_PATH: state/state.enc
       - run: scripts/state-branch.sh push
         env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }

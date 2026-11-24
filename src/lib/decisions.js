@@ -68,13 +68,14 @@ export function upcoming(v, { renewals = [], today }) {
 }
 
 // ---------- Records and outcomes ----------
-// records: { [id]: { status: "done" | "other" | "snoozed", at, until?, note?, d: the decision as it was } }
+// records: { [id]: { status: "done" | "other" | "snoozed", at, ts, by?, until?, note?, d: the decision as it was } }
+// ts (ms) orders the phone's and Telegram's records when they are merged (src/lib/sync.js); by: "app" | "telegram".
 
-export function decide(records, d, status, { today, note = null } = {}) {
+export function decide(records, d, status, { today, note = null, ts = Date.now(), by = null } = {}) {
   records = Object.fromEntries(Object.entries(records || {}).filter(([, r]) => daysBetween(r.at, today) <= KEEP_DAYS));
   const left = d.due ? daysBetween(today, d.due) : 0; // counted from today, not from when the decision was built
   const until = status === "snoozed" ? addDays(today, left > 0 ? Math.min(SNOOZE_DAYS, left) : SNOOZE_DAYS) : undefined;
-  return { ...records, [d.id]: { status, at: today, ...(until && { until }), ...(note && { note }), d } };
+  return { ...records, [d.id]: { status, at: today, ts, ...(by && { by }), ...(until && { until }), ...(note && { note }), d } };
 }
 
 export function undo(records, id) {
