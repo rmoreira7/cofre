@@ -231,25 +231,27 @@ function addMonths(ym, n) {
   return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`;
 }
 
-// Per-group series over the closed months, with the mean of all of them and of the last 3.
+// Per-group series over the closed months: the mean of all of them and of the last 3, and the median.
 export function clusterTrends(byM, keys) {
   const mean = (a) => a.reduce((x, y) => x + y, 0) / (a.length || 1);
+  const median = (a) => { const o = [...a].sort((x, y) => x - y), h = o.length >> 1; return o.length % 2 ? o[h] : o.length ? (o[h - 1] + o[h]) / 2 : 0; };
   return Object.fromEntries(CLUSTERS.map((c) => {
     const series = keys.map((k) => byM[k]?.[c.id] || 0);
-    return [c.id, { series, avg: mean(series), avg3: mean(series.slice(-3)) }];
+    return [c.id, { series, avg: mean(series), avg3: mean(series.slice(-3)), median: median(series) }];
   }));
 }
 
-// A target the income can pay for: 90% of the regular income, to the R$ 500. Group limits = each group's average
-// scaled to that target (to the R$ 50); the rounding remainder goes to the largest group so they add up exactly.
+// A target the income can pay for: 90% of the regular income, to the R$ 500. Group limits = each group's median
+// (one outlier cycle doesn't inflate it) scaled to that target, to the R$ 50; the rounding remainder goes to the
+// largest group so they add up exactly.
 export function suggestGoals({ income, trends }) {
   if (!(income > 0)) return null;
   const target = Math.round((income * 0.9) / 500) * 500;
   const ids = CLUSTERS.filter((c) => c.limit !== null).map((c) => c.id);
-  const base = ids.reduce((a, id) => a + trends[id].avg, 0);
+  const base = ids.reduce((a, id) => a + trends[id].median, 0);
   if (!base) return null;
-  const limits = Object.fromEntries(ids.map((id) => [id, Math.round((trends[id].avg * target) / base / 50) * 50]));
-  const top = ids.reduce((a, id) => (trends[id].avg > trends[a].avg ? id : a));
+  const limits = Object.fromEntries(ids.map((id) => [id, Math.round((trends[id].median * target) / base / 50) * 50]));
+  const top = ids.reduce((a, id) => (trends[id].median > trends[a].median ? id : a));
   limits[top] += target - Object.values(limits).reduce((a, b) => a + b, 0);
   return { target, limits, income, left: income - target };
 }

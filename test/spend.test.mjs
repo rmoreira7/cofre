@@ -155,12 +155,14 @@ test("clusterTrends: per-group series over the given months, mean of all and of 
   assert.equal(t.food.avg, 300);
   assert.equal(t.food.avg3, 1100 / 3);
   assert.equal(t.travel.avg, 12.5);
+  assert.equal(t.food.median, 250);
+  assert.equal(t.travel.median, 0);
   assert.equal(t.shop.avg, 0);
 });
 
-test("suggestGoals: 90% of income to the R$ 500, limits scaled from the averages and adding up to the target", () => {
-  const trends = Object.fromEntries(CLUSTERS.map((c) => [c.id, { avg: 0 }]));
-  Object.assign(trends, { travel: { avg: 5120 }, food: { avg: 2814 }, shop: { avg: 1363 }, pix: { avg: 1769 }, other: { avg: 999 } });
+test("suggestGoals: 90% of income to the R$ 500, limits scaled from the medians and adding up to the target", () => {
+  const trends = Object.fromEntries(CLUSTERS.map((c) => [c.id, { avg: 0, median: 0 }]));
+  Object.assign(trends, { travel: { avg: 5120, median: 5120 }, food: { avg: 2814, median: 2814 }, shop: { avg: 1363, median: 1363 }, pix: { avg: 1769, median: 1769 }, serv: { avg: 1409, median: 0 }, other: { avg: 999, median: 999 } });
   const g = suggestGoals({ income: 13583, trends });
   assert.equal(g.target, 12000);
   assert.equal(g.left, 1583);
@@ -168,5 +170,6 @@ test("suggestGoals: 90% of income to the R$ 500, limits scaled from the averages
   assert.ok(!("other" in g.limits), "Outros has no limit");
   assert.equal(g.limits.shop, Math.round((1363 * 12000) / 11066 / 50) * 50);
   assert.ok(g.limits.travel > g.limits.food);
+  assert.equal(g.limits.serv, 0, "an outlier-driven mean does not set the limit");
   assert.equal(suggestGoals({ income: 0, trends }), null);
 });

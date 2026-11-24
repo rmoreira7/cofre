@@ -89,7 +89,7 @@ function goalsCard(g, target, avg, n) {
       <div class="tile"><span class="label">Sobra prevista</span><b class="${g.left >= 0 ? "ok" : "bad"}">${g.left >= 0 ? "+" : "−"}${brl(Math.abs(g.left))}</b><span class="muted sm">por ciclo</span></div>
     </div>
     <button class="btn" data-a="goals">Usar ${kBRL(g.target)} e os limites sugeridos</button>
-    <div class="muted sm mt6">Limites = a média de ${n} ciclos de cada grupo, na proporção da meta. Dá para editar um a um em Ajustes.</div>
+    <div class="muted sm mt6">Limites = a mediana de ${n} ciclos de cada grupo, na proporção da meta (um ciclo fora da curva não infla o limite). Dá para editar um a um em Ajustes.</div>
   </div>`;
 }
 
