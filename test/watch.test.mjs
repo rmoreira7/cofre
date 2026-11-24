@@ -1,55 +1,82 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decide, message } from "../watch/decide.mjs";
+import { decide, decisionText, digest, maturityFacts } from "../watch/decide.mjs";
 
 const today = "2026-11-24"; // a Tuesday
-const mat = (due, balance, extra = {}) => ({ due, bank: "xp", issuer: "Emissor A", n: 1, balance, rates: ["110% CDI"], joint: false, tag: null, ...extra });
-const base = (alerts, rows = []) => ({ alerts, mat: { rows }, status: [{ name: "XP", ok: true, consent: "2027-11-06" }] });
+const inDays = (n, from = today) => new Date(Date.parse(from + "T12:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+const mat = (days, balance, extra = {}) => ({ due: inDays(days), days, bank: "bank_x", issuer: "Emissor A", n: 1, balance, rates: ["110% CDI"], joint: false, tag: null, ...extra });
+// The parts of the view decide() reads: cards, maturities, balances, FGC, connection status.
+const view = ({ rows = [], cards = [], banks = [], issuers = [] } = {}) => ({ today, cards, mat: { rows }, wealth: { banks }, guarantee: { issuers }, status: [{ name: "Banco X", ok: true, consent: "2027-11-06" }] });
 
 test("a maturity speaks only on D-7/3/1/0", () => {
   for (const [days, speaks] of [[7, true], [6, false], [3, true], [1, true], [0, true], [12, false]]) {
-    const due = new Date(Date.parse(today + "T12:00:00Z") + days * 864e5).toISOString().slice(0, 10);
-    const d = decide(base([{ kind: "maturity", issuer: "Emissor A", n: 1, due, days, amount: 20000, cdbMin: 110, scope: "mine" }], [mat(due, 20000)]), { today });
+    const d = decide(view({ rows: [mat(days, 2000)] }), { today });
     assert.equal(d.urgent.length, speaks ? 1 : 0, `D-${days}`);
+    if (speaks) assert.equal(d.urgent[0].id, `mat:bank_x:Emissor A:${inDays(days)}`);
   }
 });
 
-test("the maturity carries the ladder's split and the BRB rule", () => {
-  const due = "2026-12-01";
-  const d = decide(base([{ kind: "maturity", issuer: "BRB", n: 1, due, days: 7, amount: 28000, brb: true, cdbMin: 110, scope: "joint" }], [mat(due, 28000, { issuer: "BRB", tag: "brb" }), mat("2028-06-01", 50000)]), { today });
+test("the maturity carries the ladder's split, the BRB rule and the joint tag", () => {
+  const d = decide(view({ rows: [mat(7, 2800, { issuer: "BRB", tag: "brb", joint: true }), mat(600, 5000)] }), { today });
   assert.match(d.urgent[0].text, /BRB: não renovar/);
   assert.match(d.urgent[0].text, /Sugestão da escada: /);
   assert.match(d.urgent[0].text, /conta conjunta/);
+  assert.equal(d.urgent[0].facts["observação"], "o valor não volta para o BRB");
 });
 
 test("bills speak on D-3 and D-1 only", () => {
-  const d3 = decide(base([{ kind: "bill", bank: "Nubank", due: "2026-11-27", days: 3, amount: 6968 }]), { today });
-  const d2 = decide(base([{ kind: "bill", bank: "Nubank", due: "2026-11-26", days: 2, amount: 6968 }]), { today });
-  assert.equal(d3.urgent.length, 1);
-  assert.equal(d2.urgent.length, 0);
+  const card = (days) => ({ bank: "card_a", name: "Cartão A", bill: 696, due: inDays(days) });
+  assert.equal(decide(view({ cards: [card(3)] }), { today }).urgent.length, 1);
+  assert.equal(decide(view({ cards: [card(2)] }), { today }).urgent.length, 0);
 });
 
-test("standing conditions wait for Monday; a quiet Tuesday sends nothing", () => {
-  const v = base([{ kind: "idle", bank: "Itaú", amount: 82000, scope: "joint" }]);
+test("idle cash and FGC excess speak on Mondays, with buttons' ids; a quiet Tuesday sends nothing", () => {
+  const v = view({ banks: [{ label: "bank_j", name: "Banco J", checking: 9000, joint: true }] });
   const tue = decide(v, { today });
-  assert.equal(tue.weekly.length, 0);
-  assert.equal(message(tue, today), null);
-  const mon = decide(v, { today: "2026-11-23" });
-  assert.equal(mon.weekly.length, 1);
-  assert.match(message(mon, "2026-11-23"), /parado na conta · conta conjunta/);
+  assert.equal(tue.urgent.length, 0);
+  assert.equal(digest(tue, today), null);
+  const mon = decide({ ...v, today: "2026-11-23" }, { today: "2026-11-23", cdiDaily: 0.05 });
+  assert.equal(mon.urgent[0].id, "idle:bank_j");
+  assert.match(mon.urgent[0].text, /R\$ 9\.000 parado na conta · conta conjunta · ~R\$ 4,50 por dia útil/);
+  assert.match(mon.urgent[0].text, /Investir R\$ 4\.000/);
+  assert.match(digest(mon, "2026-11-23"), /Fora as decisões acima, nada pendente/);
 });
 
-test("Monday says so when nothing is pending, and flags broken banks and expiring consents", () => {
-  assert.match(message(decide(base([]), { today: "2026-11-23" }), "2026-11-23"), /Semana sem pendências/);
-  const v = { alerts: [], mat: { rows: [] }, status: [{ name: "Nubank", ok: false, error: "LOGIN_ERROR" }, { name: "Wise", ok: true, consent: "2026-12-10" }] };
+test("Monday digest: maturities 8–30 days out, broken banks and expiring consents", () => {
+  assert.match(digest(decide(view(), { today: "2026-11-23" }), "2026-11-23"), /Semana sem pendências/);
+  const v = { ...view({ rows: [mat(20, 1000)] }), status: [{ name: "Banco N", ok: false, error: "LOGIN_ERROR" }, { name: "Banco W", ok: true, consent: "2026-12-10" }] };
   const w = decide(v, { today: "2026-11-23" }).weekly.join("\n");
-  assert.match(w, /Nubank: sincronização falhou \(LOGIN_ERROR\)/);
-  assert.match(w, /Wise: consentimento expira 10\/12/);
+  assert.match(w, /Emissor A R\$ 1\.000 vence/);
+  assert.match(w, /Banco N: sincronização falhou \(LOGIN_ERROR\)/);
+  assert.match(w, /Banco W: consentimento expira 10\/12/);
+});
+
+test("renewals speak at D-30/7/1/0 with price and note", () => {
+  const renewals = [{ name: "Plano X", date: "2026-12-24", amount: 25, every: "month", note: "cancelar antes se não quiser" }, { name: "Plano Y", date: "2026-12-10", amount: 100, every: "year" }];
+  const d = decide(view(), { today, renewals });
+  assert.equal(d.urgent.length, 1);
+  assert.match(d.urgent[0].text, /Plano X<\/b> renova em 30 dias \(24\/12\) · R\$ 25,00\/mês\n   cancelar antes/);
+});
+
+test("quiet(id) silences a decision the owner already took or snoozed", () => {
+  const d = decide(view({ rows: [mat(7, 2000)] }), { today, quiet: (id) => id.startsWith("mat:") });
+  assert.equal(d.urgent.length, 0);
 });
 
 test("names are HTML-escaped for Telegram", () => {
-  const d = decide(base([{ kind: "bill", bank: "A&B <x>", due: "2026-11-27", days: 3, amount: 1 }]), { today });
+  const d = decide(view({ cards: [{ bank: "c", name: "A&B <x>", bill: 1, due: inDays(3) }] }), { today });
   assert.match(d.urgent[0].text, /A&amp;B &lt;x&gt;/);
+});
+
+test("maturity facts carry the rules' own below/above split, so the model never compares", () => {
+  const lad = { now: [{ label: "≤6m", share: 0.3, max: 6 }, { label: "6–12m", share: 0.1, max: 12 }, { label: "12–18m", share: 0.2, max: 18 }, { label: "18–24m", share: 0.05, max: 24 }, { label: "24–36m", share: 0.15, max: 36 }, { label: "36m+", share: 0.2, max: Infinity }] };
+  const f = maturityFacts({ issuer: "Emissor A", amount: 70, due: "2026-12-08", joint: false }, { buys: [{ months: 24, amount: 70 }] }, lad, 0.05);
+  assert.equal(f["faixas abaixo do alvo"], "6–12m (10,0%), 18–24m (5,0%), 24–36m (15,0%)");
+  assert.equal(f["faixas acima do alvo"], "≤6m (30,0%), 12–18m (20,0%), 36m+ (20,0%)");
+  assert.equal(f["compra sugerida"], "R$ 70 em 2 anos, na faixa 18–24m");
+  assert.equal(f["custo de cada dia útil sem aplicar"], "R$ 0,04");
+  assert.equal(f["observação"], undefined);
+  assert.equal(maturityFacts({ issuer: "BRB", amount: 70, due: "2026-12-08", brb: true }, null, lad, null)["observação"], "o valor não volta para o BRB");
 });
 
 import { guard, outputText, explain } from "../watch/explain.mjs";
@@ -86,29 +113,6 @@ test("explain drops a reply with an invented number, and never throws", async ()
   assert.equal((await explain(facts, {})).reason, "skipped");
 });
 
-test("message shows the explanation under its decision, escaped", () => {
-  const text = message({ urgent: [{ text: "💰 X", why: "a < b" }], weekly: [], monday: false }, "2026-12-01");
-  assert.match(text, /💬 <i>a &lt; b<\/i>/);
-});
-
-import { maturityFacts } from "../watch/decide.mjs";
-
-test("maturity facts carry the rules' own below/above split, so the model never compares", () => {
-  const lad = { now: [{ label: "≤6m", share: 0.3 }, { label: "6–12m", share: 0.1 }, { label: "12–18m", share: 0.2 }, { label: "18–24m", share: 0.05 }, { label: "24–36m", share: 0.15 }, { label: "36m+", share: 0.2 }] };
-  const f = maturityFacts({ issuer: "Emissor A", amount: 70, due: "2026-12-08", days: 7, cdbMin: 110, scope: "mine" }, { buys: [{ months: 24, amount: 70 }] }, lad, 0.05);
-  assert.equal(f["faixas abaixo do alvo"], "6–12m (10,0%), 18–24m (5,0%), 24–36m (15,0%)");
-  assert.equal(f["faixas acima do alvo"], "≤6m (30,0%), 12–18m (20,0%), 36m+ (20,0%)");
-  assert.equal(f["compra sugerida"], "R$ 70 em 2 anos, na faixa 18–24m");
-  assert.equal(f["custo de cada dia útil sem aplicar"], "R$ 0,04");
-  assert.equal(f["observação"], undefined);
-  assert.equal(maturityFacts({ issuer: "BRB", amount: 70, due: "2026-12-08", brb: true, cdbMin: 110 }, null, lad, null)["observação"], "o valor não volta para o BRB");
-});
-
-test("renewals speak at D-30/7/1/0 with price and note; idle cash carries its cost per business day", () => {
-  const renewals = [{ name: "Plano X", date: "2026-12-24", amount: 25, every: "month", note: "cancelar antes se não quiser" }, { name: "Plano Y", date: "2026-12-10", amount: 100, every: "year" }];
-  const d = decide(base([]), { today, renewals });
-  assert.equal(d.urgent.length, 1);
-  assert.match(d.urgent[0].text, /Plano X<\/b> renova em 30 dias \(24\/12\) · R\$ 25,00\/mês\n   cancelar antes/);
-  const mon = decide(base([{ kind: "idle", bank: "Banco", amount: 2000, scope: "mine" }]), { today: "2026-11-23", cdiDaily: 0.05 });
-  assert.match(mon.weekly[0], /R\$ 2\.000 parado na conta · ~R\$ 1,00 por dia útil/);
+test("decisionText puts the explanation under its decision, escaped", () => {
+  assert.match(decisionText({ text: "💰 X", why: "a < b" }), /💬 <i>a &lt; b<\/i>/);
 });

@@ -13,8 +13,8 @@ on:
         type: string
         default: ""
 permissions:
-  contents: read
-concurrency: { group: watch, cancel-in-progress: false }
+  contents: write # the encrypted state on the watch-state branch
+concurrency: { group: cofre-state, cancel-in-progress: false } # shared with taps.yml: one writer of the state at a time
 jobs:
   watch:
     runs-on: ubuntu-latest
@@ -26,6 +26,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm test
+      - run: scripts/state-branch.sh pull
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
       - run: node watch/run.mjs
         env:
           PLUGGY_CLIENT_ID: ${{ secrets.PLUGGY_CLIENT_ID }}
@@ -38,3 +40,8 @@ jobs:
           COFRE_RENEWALS: ${{ secrets.COFRE_RENEWALS }}
           FORCE_DIGEST: ${{ inputs.digest && '1' || '' }}
           TODAY: ${{ inputs.today }}
+          COFRE_STATE_KEY: ${{ secrets.COFRE_STATE_KEY }}
+          STATE_PATH: state/state.enc
+      - if: ${{ !inputs.today }} # a test date must not touch the real state
+        run: scripts/state-branch.sh push
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }

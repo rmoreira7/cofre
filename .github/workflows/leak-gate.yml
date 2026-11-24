@@ -1,6 +1,7 @@
 name: leak-gate
 on:
   push:
+    branches-ignore: [watch-state] # the watcher's encrypted state only
   pull_request:
 permissions:
   contents: read

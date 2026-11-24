@@ -37,25 +37,26 @@ export function candidates(v, { lad, renewals = [], idleCash = 5000, cdbMin = 11
   for (const c of v.cards) {
     if (!c.due || !(c.bill > 0)) continue;
     const days = daysBetween(today, c.due);
-    if (days >= 0 && days <= BILL_WINDOW) out.push({ id: `bill:${c.bank}:${c.due}`, kind: "bill", title: `Pagar ${c.name}`, due: c.due, days, amount: c.bill, bank: c.bank,
+    if (days >= 0 && days <= BILL_WINDOW) out.push({ id: `bill:${c.bank}:${c.due}`, kind: "bill", title: `Pagar ${c.name}`, name: c.name, due: c.due, days, amount: c.bill, bank: c.bank,
       detail: c.exact && c.early ? { early: c.early, charges: c.charges } : null });
   }
   for (const r of v.mat.rows) {
     if (r.days > MATURITY_WINDOW || r.days < -MATURITY_GRACE) continue;
     const p = lad?.plan.find((x) => x.due === r.due);
     const rung = (m) => lad?.now.find((x) => m <= x.max)?.label;
-    out.push({ id: `mat:${r.bank}:${r.issuer}:${r.due}`, kind: "maturity", title: `Reaplicar ${r.issuer}${r.n > 1 ? ` ×${r.n}` : ""}`, due: r.due, days: r.days, amount: r.balance, bank: r.bank, joint: Boolean(r.joint), brb: r.tag === "brb",
+    out.push({ id: `mat:${r.bank}:${r.issuer}:${r.due}`, kind: "maturity", title: `Reaplicar ${r.issuer}${r.n > 1 ? ` ×${r.n}` : ""}`, issuer: r.issuer, n: r.n, due: r.due, days: r.days, amount: r.balance, bank: r.bank, joint: Boolean(r.joint), brb: r.tag === "brb", cdbMin,
       suggestion: p?.buys.length ? p.buys.map((b) => ({ amount: b.amount, term: term(b.months), rung: rung(b.months) })) : null,
       rule: `CDB ≥ ${cdbMin}% CDI, outro emissor`, cost: idleCost(r.balance, cdiDaily) });
   }
   for (const b of v.wealth.banks) {
     if (!(b.checking > idleCash)) continue;
+    // name is the bank's display name (for messages), bank its label (for the id and the checks).
     const amount = b.checking - idleCash;
-    out.push({ id: `idle:${b.label}`, kind: "idle", title: `Investir o parado no ${b.name}`, due: today, days: 0, amount, bank: b.label, joint: b.joint,
+    out.push({ id: `idle:${b.label}`, kind: "idle", title: `Investir o parado no ${b.name}`, name: b.name, due: today, days: 0, amount, bank: b.label, joint: b.joint,
       detail: { balance: b.checking, reserve: idleCash }, cost: idleCost(b.checking, cdiDaily) });
   }
-  for (const e of v.guarantee?.issuers.filter((x) => x.over) || []) out.push({ id: `fgc:${e.issuer}`, kind: "fgc", title: `Tirar o excesso de ${e.issuer}`, due: today, days: 0, amount: e.over, joint: e.joint, detail: { total: e.amount } });
-  for (const r of upcomingRenewals(renewals, today, RENEWAL_WINDOW)) out.push({ id: `ren:${r.name}:${r.date}`, kind: "renewal", title: `${r.name} renova`, due: r.date, days: r.days, amount: r.amount ?? null, every: r.every, detail: r.note || null });
+  for (const e of v.guarantee?.issuers.filter((x) => x.over) || []) out.push({ id: `fgc:${e.issuer}`, kind: "fgc", title: `Tirar o excesso de ${e.issuer}`, issuer: e.issuer, due: today, days: 0, amount: e.over, joint: e.joint, detail: { total: e.amount } });
+  for (const r of upcomingRenewals(renewals, today, RENEWAL_WINDOW)) out.push({ id: `ren:${r.name}:${r.date}`, kind: "renewal", title: `${r.name} renova`, name: r.name, due: r.date, days: r.days, amount: r.amount ?? null, every: r.every, detail: r.note || null });
   return out.sort((a, b) => a.days - b.days || (b.amount || 0) - (a.amount || 0));
 }
 

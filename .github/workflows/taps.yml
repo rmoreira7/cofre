@@ -1,0 +1,30 @@
+name: taps
+# Records Telegram button taps (✓ Feito / ⏰ Adiar / ↩ Desfazer) on the watcher's messages, every few minutes.
+# No bank calls: only Telegram and the encrypted state. GitHub may start a scheduled run some minutes late.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: { group: cofre-state, cancel-in-progress: false }
+jobs:
+  taps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      TZ: America/Sao_Paulo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: scripts/state-branch.sh pull
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+      - run: node watch/taps.mjs
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          COFRE_STATE_KEY: ${{ secrets.COFRE_STATE_KEY }}
+          STATE_PATH: state/state.enc
+      - run: scripts/state-branch.sh push
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }

@@ -23,7 +23,13 @@ DENYLIST=/path/outside/repo/denylist.txt scripts/install-hooks.sh
 the app uses and sends the decisions that are due to a private Telegram chat: maturities at D-7/3/1/0 with the
 ladder's split, card bills at D-3/1, renewals (subscriptions, annual plans) at D-30/7/1/0, and a Monday digest (idle cash with its cost
 per business day, FGC, failed banks, expiring consents). The renewal list is a private Actions secret (`COFRE_RENEWALS`)
-and a `renewals` list in the rules file, never in this repository. This is
+and a `renewals` list in the rules file, never in this repository.
+
+Each decision is its own Telegram message with **✓ Feito / ⏰ Adiar** buttons (then **↩ Desfazer**). `taps.yml` picks up
+the taps every ~5 minutes and edits the message; the daily run stops repeating a decided item, checks it against the
+bank data with the app's `outcome()`, and reports once (confirmed, or not found: it then speaks again). That memory is
+`state.enc` on the `watch-state` branch, AES-256-GCM with the `COFRE_STATE_KEY` secret: public repository, unreadable
+file. Decision ids are the app's (`src/lib/decisions.js`). This is
 the one place data leaves the phone: the message text goes through Telegram. Credentials live only in the repo's
 Actions secrets, and the logs carry counts only.
 

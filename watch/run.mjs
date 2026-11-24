@@ -1,16 +1,24 @@
-// Daily run (.github/workflows/watch.yml): pull Pluggy, decide what is due, send it to Telegram. Logs carry counts only, never amounts or names.
+// Daily run (.github/workflows/watch.yml): pull Pluggy, record any button taps, report how decided things turned out,
+// send each decision due today as its own message with ✓ Feito / ⏰ Adiar buttons, and the Monday digest.
+// Logs carry counts only, never amounts or names.
 // env: PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET, PLUGGY_ITEMS ("label:id,…"), COFRE_ENTITIES (rules.entities JSON),
-//      TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, DRY_RUN=1 (print instead of send), FORCE_DIGEST=1 (treat today as Monday),
+//      TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, COFRE_STATE_KEY + STATE_PATH (buttons; without them, plain messages),
 //      OPENAI_API_KEY (optional: explanations), OPENAI_MODEL, COFRE_RENEWALS (optional JSON list),
-//      TODAY=YYYY-MM-DD (test a future date).
+//      DRY_RUN=1 (print instead of send), FORCE_DIGEST=1 (treat today as Monday), TODAY=YYYY-MM-DD (test a date).
 import { createPluggy } from "../src/lib/pluggy.js";
 import { slim } from "../src/lib/model.js";
 import { localToday } from "../src/lib/format.js";
-import { view, decide, message } from "./decide.mjs";
+import { outcome } from "../src/lib/decisions.js";
+import { view, decide, decisionText, digest } from "./decide.mjs";
 import { explain, MODEL } from "./explain.mjs";
+import { createTelegram } from "./telegram.mjs";
+import { load, save, EMPTY } from "./state.mjs";
+import { applyTaps, buttons, pruneMessages } from "./taps.mjs";
 
 const need = (k) => process.env[k] || (console.error(`missing ${k}`), process.exit(2));
 const dry = process.env.DRY_RUN === "1";
+const MAX_EXPLAIN = 5;
+const IDLE_CASH = 5000;
 
 async function fx(snap) {
   const cur = [...new Set(snap.items.flatMap((it) => (it.accounts || []).map((a) => a.currencyCode)).filter((c) => c && c !== "BRL"))];
@@ -34,15 +42,21 @@ async function cdiDaily() {
   }
 }
 
-const MAX_EXPLAIN = 5;
-
-async function telegram(text) {
-  const r = await fetch(`https://api.telegram.org/bot${need("TELEGRAM_BOT_TOKEN")}/sendMessage`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ chat_id: need("TELEGRAM_CHAT_ID"), text, parse_mode: "HTML", disable_web_page_preview: true }),
-  });
-  if (!r.ok) throw new Error(`telegram ${r.status}: ${(await r.text()).slice(0, 200)}`);
+// What a decided decision's check found, once per state change: confirmed, or not found (it then speaks again).
+const ddmm = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+function reportText(r, o) {
+  const d = r.d;
+  if (o.state === "ok") {
+    if (d.kind === "maturity") return `✅ <b>${d.title}</b> confirmado: ${o.n} ${o.n === 1 ? "aplicação nova" : "aplicações novas"}${o.cdi ? ` a ${Math.round(o.cdi)}% CDI` : ""}${o.cdi && d.cdbMin && o.cdi < d.cdbMin ? ` (abaixo do mínimo de ${d.cdbMin}%)` : ""}.`;
+    if (d.kind === "idle") return `✅ <b>${d.name}</b>: conta de volta perto da reserva.`;
+    if (d.kind === "bill") return `✅ <b>Fatura ${d.name}</b> paga: o pagamento apareceu.`;
+  }
+  if (o.state === "no") {
+    if (d.kind === "maturity") return `⚠️ <b>${d.title}</b>: marcado Feito em ${ddmm(r.at)}, mas não achei aplicação nova no banco. Volta a aparecer como decisão.`;
+    if (d.kind === "idle") return `⚠️ <b>${d.name}</b>: marcado Feito em ${ddmm(r.at)}, mas o dinheiro continua na conta.`;
+    if (d.kind === "bill") return `⚠️ <b>Fatura ${d.name}</b>: marcada como paga, mas o pagamento não apareceu.`;
+  }
+  return null;
 }
 
 const items = need("PLUGGY_ITEMS").split(",").filter((x) => x.trim()).map((x) => {
@@ -54,15 +68,40 @@ const items = need("PLUGGY_ITEMS").split(",").filter((x) => x.trim()).map((x) =>
 const rules = { entities: JSON.parse(need("COFRE_ENTITIES")) };
 // Optional: subscriptions and annual plans to warn about before they renew (a private secret, never in the repo).
 const renewals = process.env.COFRE_RENEWALS ? JSON.parse(process.env.COFRE_RENEWALS) : [];
+const today = process.env.TODAY || localToday();
+const tg = dry ? null : createTelegram({ token: need("TELEGRAM_BOT_TOKEN"), chatId: need("TELEGRAM_CHAT_ID") });
+const statePath = process.env.STATE_PATH, stateKey = process.env.COFRE_STATE_KEY;
+const withState = Boolean(statePath && stateKey);
+const state = withState ? await load(statePath, stateKey) : structuredClone(EMPTY);
+
+// 1 · taps since the last run (the taps workflow normally got them already)
+if (withState && tg) console.log(`taps: ${await applyTaps(state, tg, { chatId: need("TELEGRAM_CHAT_ID"), today })}`);
+
 const pulled = await createPluggy({ clientId: need("PLUGGY_CLIENT_ID"), clientSecret: need("PLUGGY_CLIENT_SECRET") }).pullAll(items);
 const failed = pulled.items.filter((i) => i.error).length;
 console.log(`pluggy: ${items.length - failed}/${items.length} banks ok`);
 if (failed === items.length) process.exit(1);
-
 const snap = slim(pulled);
 snap.fx = await fx(snap);
-const today = process.env.TODAY || localToday();
-const d = decide(view(snap, rules, today), { today, cdiDaily: await cdiDaily(), renewals, ...(process.env.FORCE_DIGEST === "1" && { monday: true }) });
+
+// 2 · how decided things turned out (each state reported once)
+const out = new Map(Object.entries(state.decisions).map(([id, r]) => [id, r.status === "snoozed" ? null : outcome(r, snap, { today, idleCash: IDLE_CASH })]));
+const reports = [];
+for (const [id, o] of out) {
+  if (!o || o.state === state.reported[id]) continue;
+  const t = reportText(state.decisions[id], o);
+  if (t) reports.push(t);
+  state.reported[id] = o.state;
+}
+
+// 3 · what is due today, minus what was decided (unless its check failed) or snoozed
+const quiet = (id) => {
+  const r = state.decisions[id];
+  if (!r) return false;
+  if (r.status === "snoozed") return r.until > today;
+  return out.get(id)?.state !== "no";
+};
+const d = decide(view(snap, rules, today), { today, cdiDaily: await cdiDaily(), renewals, idleCash: IDLE_CASH, quiet, ...(process.env.FORCE_DIGEST === "1" && { monday: true }) });
 let tokens = 0;
 for (const u of d.urgent.filter((u) => u.facts).slice(0, MAX_EXPLAIN)) {
   const r = await explain(u.facts, { apiKey: process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL || MODEL });
@@ -72,8 +111,20 @@ for (const u of d.urgent.filter((u) => u.facts).slice(0, MAX_EXPLAIN)) {
   console.log(`explain: ${r.reason}`);
 }
 if (tokens) console.log(`openai tokens: ${tokens}`);
-console.log(`decisions: ${d.urgent.length} urgent, ${d.weekly.length} weekly, digest=${d.monday}`);
-const text = message(d, today);
-if (!text) console.log("nothing to send");
-else if (dry) console.log("\n" + text);
-else { await telegram(text); console.log("sent"); }
+console.log(`decisions: ${d.urgent.length} due, ${reports.length} reports, ${d.weekly.length} weekly, digest=${d.monday}`);
+
+const week = digest(d, today);
+if (dry) {
+  for (const t of [...reports, ...d.urgent.map(decisionText), ...(week ? [week] : [])]) console.log("\n" + t);
+} else {
+  for (const t of reports) await tg.send(t);
+  for (const u of d.urgent) {
+    const text = decisionText(u);
+    const n = withState ? ++state.seq : null;
+    const m = await tg.send(text, withState ? buttons(n) : null);
+    if (withState) state.messages[n] = { id: u.id, d: u.d, text, at: today, mid: m.message_id };
+  }
+  if (week) await tg.send(week);
+  console.log("sent");
+}
+if (withState && !dry) { pruneMessages(state, today); await save(statePath, state, stateKey); }
