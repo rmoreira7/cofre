@@ -2,6 +2,9 @@
 import { brl, mil, pct, MES, esc } from "../../lib/format.js";
 import { bankName } from "../../lib/model.js";
 import { maturitiesIcs } from "../../lib/ics.js";
+import { syncMaturities, SCOPE } from "../../lib/gcal.js";
+import { requestToken } from "../../lib/gauth.js";
+import { localToday } from "../../lib/format.js";
 import { download } from "../../ui/shell.js";
 import { earnTiles } from "../../ui/earn.js";
 
@@ -13,7 +16,8 @@ let filter = "365";
 export function render(t) {
   const { mat, lad, reserve } = t;
   const sub = mat.total ? `${[...new Set(mat.rows.map((r) => bankName(r.bank) + (r.joint ? " (conjunta)" : "")))].join(" + ")} · ${mil(mat.total)}` : "";
-  return `    <div class="row mb10"><div class="sub">${esc(sub)}</div><button class="lnk" data-a="ics">${CAL_ICON} Agenda</button></div>
+  return `    <div class="row mb10"><div class="sub">${esc(sub)}</div><span class="row"><button class="lnk" data-a="gcal">${CAL_ICON} Google Agenda</button><button class="lnk muted" data-a="ics">.ics</button></span></div>
+    <div class="muted sm mb10" data-gstat role="status"></div>
     <div class="card muted sm" data-icshint hidden>${ICS_HINT}</div>
     ${lad.total ? ladderCard(lad, reserve) + planCard(lad) + aheadCard(lad) : ""}
     <div class="seg">${[["90", "90 dias"], ["365", "12 meses"], ["all", "Todos"]].map(([f, l]) => `<button data-f="${f}" class="${f === filter ? "on" : ""}">${l}</button>`).join("")}</div>
@@ -21,7 +25,7 @@ export function render(t) {
 `;
 }
 
-export function bind(pane, t) {
+export function bind(pane, t, ctx) {
   const { mat } = t;
   const list = pane.querySelector("[data-list]");
   const paint = () => {
@@ -35,7 +39,29 @@ export function bind(pane, t) {
     }).concat(liquid).join("") || '<div class="muted">Nada neste período.</div>';
   };
 
+  const gstat = pane.querySelector("[data-gstat]");
+  let syncing = false;
+  const gcal = async () => {
+    const g = ctx.data.gcal;
+    if (!g?.clientId) { ctx.go("settings", "connections"); return; }
+    if (syncing) return;
+    syncing = true; gstat.className = "muted sm mb10"; gstat.textContent = "Entrando no Google…";
+    try {
+      const token = await requestToken({ clientId: g.clientId, scope: SCOPE });
+      gstat.textContent = "Enviando vencimentos…";
+      const rows = mat.rows.filter((r) => r.days >= 0);
+      const r = await syncMaturities(rows, { token, calId: g.calId, today: localToday(), bankName, money: (n) => brl(n, 2) });
+      await ctx.update((d) => ({ ...d, gcal: { ...(d.gcal || {}), calId: r.calId, last: { at: new Date().toISOString(), total: rows.length } } }));
+      const bits = [r.added && `${r.added} novos`, r.updated && `${r.updated} atualizados`, r.removed && `${r.removed} removidos`].filter(Boolean);
+      gstat.className = "ok sm mb10";
+      gstat.textContent = `Agenda Cofre em dia: ${rows.length} vencimentos${bits.length ? ` (${bits.join(", ")})` : ", nada mudou"}.`;
+    } catch (e) {
+      gstat.className = "bad sm mb10";
+      gstat.textContent = e.status === 403 ? "O Google recusou: confira se a Google Calendar API está ativa e o escopo calendar.app.created foi adicionado." : e.message;
+    } finally { syncing = false; }
+  };
   pane.onclick = (e) => {
+    if (e.target.closest('[data-a="gcal"]')) { gcal(); return; }
     const f = e.target.closest("[data-f]")?.dataset.f;
     if (f) { filter = f; pane.querySelectorAll(".seg button").forEach((b) => b.classList.toggle("on", b.dataset.f === f)); paint(); }
     if (e.target.closest('[data-a="ics"]')) download("cofre-vencimentos.ics", new Blob([maturitiesIcs(mat.rows.filter((r) => r.days >= 0), { bankName, money: (n) => brl(n, 2) })], { type: "text/calendar" })), pane.querySelector("[data-icshint]").hidden = false;

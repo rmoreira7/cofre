@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const STATIC = ["./", "index.html", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png"];
+const STATIC = ["./", "index.html", "oauth.html", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png"];
 const walk = (d) => readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : [join(d, f)]));
 const src = walk("src").filter((f) => /\.(js|css)$/.test(f)).sort((a, b) => (a.endsWith(".css") ? 0 : 1) - (b.endsWith(".css") ? 0 : 1) || a.localeCompare(b));
 const lines = [];

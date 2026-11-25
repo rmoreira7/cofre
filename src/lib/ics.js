@@ -19,22 +19,35 @@ function fold(line) {
   return [...out, cur].join("\r\n");
 }
 
+// One maturity group as a calendar event, shared by the .ics file and the Google Calendar sync.
+export function maturityEvent(r, { bankName = (b) => b, money = (n) => n.toFixed(2) } = {}) {
+  const who = `${r.issuer}${r.n > 1 ? ` ×${r.n}` : ""}`;
+  const where = `${bankName(r.bank)}${r.joint ? " (conta conjunta)" : ""}`;
+  return {
+    uid: `cofre-${r.due}-${slug(r.bank)}-${slug(r.issuer)}@cofre`,
+    date: r.due.slice(0, 10),
+    end: next(r.due),
+    summary: `Vence: ${who} · ${where}`,
+    description: `${money(r.balance)} · ${(r.rates || []).join(" / ")}${r.tag === "brb" ? "\nNão renovar no BRB." : ""}`,
+    alarm: `Vence em 7 dias: ${who}`,
+  };
+}
+
 export function maturitiesIcs(rows, { bankName = (b) => b, money = (n) => n.toFixed(2), now = new Date() } = {}) {
   const stamp = now.toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
   const ev = rows.map((r) => {
-    const who = `${r.issuer}${r.n > 1 ? ` ×${r.n}` : ""}`;
-    const where = `${bankName(r.bank)}${r.joint ? " (conta conjunta)" : ""}`;
+    const e = maturityEvent(r, { bankName, money });
     return [
       "BEGIN:VEVENT",
-      `UID:cofre-${r.due}-${slug(r.bank)}-${slug(r.issuer)}@cofre`,
+      `UID:${e.uid}`,
       `DTSTAMP:${stamp}`,
-      `DTSTART;VALUE=DATE:${day(r.due)}`,
-      `DTEND;VALUE=DATE:${day(next(r.due))}`,
-      `SUMMARY:${esc(`Vence: ${who} · ${where}`)}`,
-      `DESCRIPTION:${esc(`${money(r.balance)} · ${(r.rates || []).join(" / ")}${r.tag === "brb" ? "\nNão renovar no BRB." : ""}`)}`,
+      `DTSTART;VALUE=DATE:${day(e.date)}`,
+      `DTEND;VALUE=DATE:${day(e.end)}`,
+      `SUMMARY:${esc(e.summary)}`,
+      `DESCRIPTION:${esc(e.description)}`,
       "COLOR:orangered",
       "TRANSP:TRANSPARENT",
-      "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${esc(`Vence em 7 dias: ${who}`)}`, "TRIGGER:-P7D", "END:VALARM",
+      "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${esc(e.alarm)}`, "TRIGGER:-P7D", "END:VALARM",
       "END:VEVENT",
     ];
   });

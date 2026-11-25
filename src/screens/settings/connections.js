@@ -1,5 +1,5 @@
 // Ajustes › Conexões: the Pluggy credentials and connections (status, consent, add · change ID · remove), and the
-// rules file from the laptop (import, age, overrides made on the phone → export).
+// rules file from the laptop (import, age, overrides made on the phone → export), and the Google Agenda client.
 import { parseRulesFile, rulesSummary, exportUserOverrides, entityOf } from "../../lib/categorize.js";
 import { esc, when, MES, ddmm, daysBetween, localToday } from "../../lib/format.js";
 import { itemStatus, BANKS, bankName, primaryEntity } from "../../lib/model.js";
@@ -10,6 +10,7 @@ export const label = "Conexões";
 
 const ITEM_RX = /^[a-z0-9_-]{1,32}:[0-9a-f-]{36}$/i;
 const ID_RX = /^[0-9a-f-]{36}$/i;
+export const GCLIENT_RX = /^\d+-[a-z0-9]+\.apps\.googleusercontent\.com$/;
 const STALE_RULES_DAYS = 14;
 const CONSENT_WARN_DAYS = 30;
 // UI state that survives a repaint.
@@ -30,7 +31,8 @@ export function parseItems(text) {
 export function render(t, ctx) {
   const d = ctx.data || {};
   return `${d.credentials ? connections(ctx, d) : setupCard()}
-    <div class="sec">Regras do notebook</div>${rulesCard(d)}`;
+    <div class="sec">Regras do notebook</div>${rulesCard(d)}
+    <div class="sec">Google Agenda</div>${gcalCard(d)}`;
 }
 
 export function bind(pane, t, ctx, { repaint }) {
@@ -51,6 +53,12 @@ export function bind(pane, t, ctx, { repaint }) {
       if (f.dataset.f === "creds") {
         await saveCreds(creds.items, { clientId: f.elements.id.value.trim(), clientSecret: f.elements.secret.value.trim() || creds.clientSecret });
         editCreds = false; ctx.refresh();
+      }
+      if (f.dataset.f === "gcal") {
+        const id = f.elements.client.value.trim();
+        if (!GCLIENT_RX.test(id)) throw new Error("O Client ID termina em .apps.googleusercontent.com (Google Cloud › Credenciais).");
+        await ctx.save({ ...ctx.data, gcal: { ...(ctx.data.gcal || {}), clientId: id } });
+        repaint();
       }
       if (f.dataset.f === "add") {
         const label = f.elements.label.value, id = f.elements.id.value.trim();
@@ -83,6 +91,10 @@ export function bind(pane, t, ctx, { repaint }) {
       const snap = ctx.data.snapshot;
       await ctx.save({ ...ctx.data, credentials: { ...c, items: c.items.filter((i) => i.label !== label) }, snapshot: snap ? { ...snap, items: snap.items.filter((i) => i.label !== label) } : snap });
       openConn = null; repaint();
+    }
+    if (a === "gcal-rm" && confirm("Desligar o Google Agenda deste aparelho? A agenda Cofre continua no Google.")) {
+      const { gcal, ...rest } = ctx.data; void gcal;
+      await ctx.save(rest); repaint();
     }
     if (a === "import") pane.querySelector("[data-i=rules]").click();
     if (a === "export") download(`cofre-ajustes-${localToday().replace(/-/g, "")}.json`, new Blob([exportUserOverrides(ctx.data.userOverrides)], { type: "application/json" }));
@@ -169,4 +181,21 @@ async function importRules(el, ctx, input) {
   } finally {
     input.value = "";
   }
+}
+
+// The OAuth client (public, not a secret) lives in the vault anyway, so the public repo never names the project.
+function gcalCard(d) {
+  const g = d.gcal || {};
+  if (!g.clientId) return `<div class="card">
+    <div class="muted sm">Envia os vencimentos para uma agenda <b>Cofre</b> no Google Agenda, em Tangerina. O app só enxerga a agenda que ele mesmo cria.</div>
+    <form data-f="gcal" class="mt10" autocomplete="off">
+      <label class="in">Client ID (OAuth, aplicativo da Web)<input name="client" required spellcheck="false" autocapitalize="off" placeholder="…apps.googleusercontent.com"></label>
+      <div class="err" role="alert"></div><button class="btn ghost">Salvar</button>
+    </form></div>`;
+  const last = g.last ? `${when(g.last.at).text} · ${g.last.total} eventos` : "ainda não sincronizado";
+  return `<div class="card">
+    <div class="field"><span>Client ID</span><span>${esc(g.clientId.slice(0, 6))}…apps</span></div>
+    <div class="field"><span>Última sincronização</span><span>${esc(last)}</span></div>
+    <div class="row mt10"><button class="lnk" data-go="investments:maturities">Sincronizar em Vencimentos ›</button><button class="lnk bad" data-a="gcal-rm">Desligar</button></div>
+  </div>`;
 }
