@@ -52,7 +52,8 @@ test("helpers", () => {
   assert.deepEqual(monthRange("2025-11", "2026-02"), ["2025-11", "2025-12", "2026-01", "2026-02"]);
   assert.equal(clusterOf("Tobacco"), "tobacco");
   assert.equal(clusterOf("Bank fees"), "other");
-  assert.equal(CLUSTERS.reduce((a, c) => a + (c.limit || 0), 0), 7000);
+  // The 7k plan split + Saques R$ 300 (Rafael, 11-25). The phone keeps its own target and limits in Ajustes › Metas.
+  assert.equal(CLUSTERS.reduce((a, c) => a + (c.limit || 0), 0), 7300);
   assert.equal(isInternal({ operationType: "X", description: "COMPRA CDB BANCO" }, "Shopping"), true);
 });
 

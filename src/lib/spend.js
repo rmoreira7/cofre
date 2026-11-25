@@ -16,7 +16,7 @@ export const CLUSTERS = [
   { id: "health", label: "Saúde", limit: 300, cats: ["Dentist", "Hospital clinics and labs", "Pharmacy", "Wellness and fitness", "Optometry", "Healthcare"] },
   { id: "leis", label: "Lazer", limit: 170, cats: ["Tickets", "Leisure", "Sports practice", "Gambling"] },
   { id: "tobacco", label: "Tabaco", limit: 50, cats: ["Tobacco"] },
-  { id: "cash", label: "Saques", limit: 0, cats: ["Cash withdrawals"] },
+  { id: "cash", label: "Saques", limit: 300, cats: ["Cash withdrawals"] },
   { id: "other", label: "Outros", limit: null, cats: [] },
 ];
 const CLUSTER_OF = new Map(CLUSTERS.flatMap((c) => c.cats.map((cat) => [cat, c.id])));

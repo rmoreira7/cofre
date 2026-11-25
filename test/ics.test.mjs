@@ -18,5 +18,7 @@ test("one all-day event per maturity, 7-day reminder, stable UID, folded CRLF li
   assert.ok(a.replace(/\r\n /g, "").includes("Não renovar no BRB."));
   const uids = (s) => s.match(/UID:[^\r]+/g);
   assert.deepEqual(uids(a), uids(b));
+  assert.equal(a.match(/COLOR:orangered/g).length, 3);
+  assert.ok(a.includes("X-APPLE-CALENDAR-COLOR:#F4511E"));
   for (const line of a.split("\r\n")) assert.ok(new TextEncoder().encode(line).length <= 75, line);
 });

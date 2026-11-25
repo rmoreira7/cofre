@@ -115,3 +115,32 @@ export function idbStorage(dbName = "cofre", store = "vault", id = "blob") {
     clear: () => tx("readwrite", (s) => s.delete(id)),
   };
 }
+
+// Encrypted backup file. Sealed with its own password, never the PIN: the PIN's 10-attempt wipe only protects the
+// device, and a 6-digit PIN on a copied file falls to an offline search. The data inside is the whole vault.
+export const BACKUP_KIND = "cofre-backup";
+export const BACKUP_MIN = 12;
+
+export function validBackupPassword(pass) {
+  return typeof pass === "string" && [...pass].length >= BACKUP_MIN && !/^\d+$/.test(pass);
+}
+
+export async function sealBackup(data, pass, { iterations = ITERATIONS, now = new Date() } = {}) {
+  if (!validBackupPassword(pass)) throw new Error(`A senha do backup precisa de ${BACKUP_MIN}+ caracteres e não pode ser só números.`);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await deriveKey(pass, salt, iterations);
+  return { kind: BACKUP_KIND, v: 1, created: now.toISOString(), salt: b64(salt), iterations, ...(await seal(key, data)) };
+}
+
+export async function openBackup(file, pass) {
+  const ok = file && file.kind === BACKUP_KIND && file.v === 1 && [file.salt, file.iv, file.ct].every((x) => typeof x === "string") && Number.isInteger(file.iterations) && file.iterations >= 100_000;
+  if (!ok) throw Object.assign(new Error("Este arquivo não é um backup do Cofre."), { bad: true });
+  let data;
+  try {
+    data = await unseal(await deriveKey(pass, unb64(file.salt), file.iterations), file);
+  } catch {
+    throw Object.assign(new Error("Senha do backup incorreta."), { wrong: true });
+  }
+  if (!data || typeof data !== "object" || data.v !== 1) throw Object.assign(new Error("O backup está em um formato desconhecido."), { bad: true });
+  return data;
+}

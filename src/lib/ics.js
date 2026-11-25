@@ -1,5 +1,8 @@
 // Maturities as an iCalendar file: one all-day event per maturity group, a reminder 7 days before.
+// Color: Google Calendar ignores colors in an imported file (import into a "Cofre" calendar colored Tangerina);
+// COLOR (RFC 7986) and X-APPLE-CALENDAR-COLOR are honoured by Apple Calendar and others.
 // UIDs are stable (due + bank + issuer), so importing a newer file updates events instead of duplicating them.
+export const TANGERINA = "#F4511E";
 const esc = (s) => String(s).replace(/[\;,]/g, (c) => "\\" + c).replace(/\n/g, "\\n");
 const day = (iso) => iso.slice(0, 10).replace(/-/g, "");
 const next = (iso) => new Date(Date.parse(iso.slice(0, 10) + "T12:00:00Z") + 864e5).toISOString().slice(0, 10);
@@ -29,10 +32,11 @@ export function maturitiesIcs(rows, { bankName = (b) => b, money = (n) => n.toFi
       `DTEND;VALUE=DATE:${day(next(r.due))}`,
       `SUMMARY:${esc(`Vence: ${who} · ${where}`)}`,
       `DESCRIPTION:${esc(`${money(r.balance)} · ${(r.rates || []).join(" / ")}${r.tag === "brb" ? "\nNão renovar no BRB." : ""}`)}`,
+      "COLOR:orangered",
       "TRANSP:TRANSPARENT",
       "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${esc(`Vence em 7 dias: ${who}`)}`, "TRIGGER:-P7D", "END:VALARM",
       "END:VEVENT",
     ];
   });
-  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Cofre//Vencimentos//PT-BR", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:Cofre · Vencimentos", ...ev.flat(), "END:VCALENDAR"].map(fold).join("\r\n") + "\r\n";
+  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Cofre//Vencimentos//PT-BR", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:Cofre · Vencimentos", "COLOR:orangered", `X-APPLE-CALENDAR-COLOR:${TANGERINA}`, ...ev.flat(), "END:VCALENDAR"].map(fold).join("\r\n") + "\r\n";
 }

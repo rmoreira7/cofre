@@ -1,4 +1,4 @@
-import { createVault, idbStorage, validPin } from "./lib/vault.js";
+import { createVault, idbStorage, validPin, sealBackup, openBackup } from "./lib/vault.js";
 import { createBio } from "./lib/bio.js";
 import { createPluggy } from "./lib/pluggy.js";
 import { DEFAULT_TARGET } from "./lib/spend.js";
@@ -15,7 +15,7 @@ import * as investments from "./screens/investments/index.js";
 import * as projection from "./screens/projection/index.js";
 import * as settings from "./screens/settings/index.js";
 
-export const APP_VERSION = "0.19.0";
+export const APP_VERSION = "0.20.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, investments, projection, settings };
 
@@ -49,6 +49,7 @@ const ctx = {
     await ctx.save({ ...state.data, userOverrides: u });
   },
   lock,
+  backup: (pass) => saving.then(() => sealBackup(state.data, pass)),
   async wipe() { await bio.clear(); await vault.wipe(); location.reload(); },
   go,
   // The open sub-tab of `tab`, or the first of `ids` when none was opened yet (or it no longer exists).
@@ -240,19 +241,50 @@ function pinPad({ title, subtitle, onDone, extra = "" }) {
   return api;
 }
 
-function onboarding() {
+function onboarding(restored = null) {
   let first = null;
   pinPad({
-    title: "Criar PIN",
-    subtitle: "6 dígitos. Ele protege tudo que fica neste aparelho.",
+    title: restored ? "Novo PIN" : "Criar PIN",
+    subtitle: restored ? "Backup aberto. Crie o PIN deste aparelho (6 dígitos)." : "6 dígitos. Ele protege tudo que fica neste aparelho.",
+    extra: restored ? "" : '<button class="btn ghost" data-a="restore">Restaurar backup</button>',
     async onDone(pin, ui) {
       if (!first) { first = pin; ui.reset("Confirmar PIN", "Digite o mesmo PIN de novo."); return; }
       if (pin !== first) { first = null; ui.reset("Criar PIN", "Os PINs não conferem. Comece de novo."); return; }
       await bio.clear();
-      await vault.create(pin, { v: 1, settings: { target: DEFAULT_TARGET }, credentials: null, rules: null, snapshot: null });
+      await vault.create(pin, restored || { v: 1, settings: { target: DEFAULT_TARGET }, credentials: null, rules: null, snapshot: null });
       state.data = await vault.unlock(pin);
       enter();
     },
+  });
+  app.querySelector('[data-a="restore"]')?.addEventListener("click", restoreScreen);
+}
+
+// A backup file from Ajustes › Segurança: pick it, type its password, then create this device's PIN.
+function restoreScreen() {
+  tabs.hidden = true;
+  app.innerHTML = `
+    <div class="lock">
+      <h1>Restaurar backup</h1>
+      <div class="muted">O arquivo cofre-backup-….json e a senha dele.</div>
+      <form data-f="restore" autocomplete="off" style="width:100%;max-width:320px">
+        <label class="in mt10"><span>Arquivo</span><input name="file" type="file" accept=".json,application/json" required></label>
+        <label class="in mt6"><span>Senha do backup</span><input name="pass" type="password" autocomplete="current-password" required></label>
+        <div class="err" role="alert"></div>
+        <button class="btn">Abrir backup</button>
+        <button class="btn ghost" type="button" data-a="back">Voltar</button>
+      </form>
+    </div>`;
+  const f = app.querySelector("form"), err = f.querySelector(".err");
+  f.querySelector('[data-a="back"]').addEventListener("click", () => onboarding());
+  f.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    err.textContent = "";
+    const btn = f.querySelector(".btn"); btn.disabled = true;
+    try {
+      let file;
+      try { file = JSON.parse(await f.elements.file.files[0].text()); } catch { throw new Error("Este arquivo não é um backup do Cofre."); }
+      onboarding(await openBackup(file, f.elements.pass.value));
+    } catch (e2) { err.textContent = e2.message; btn.disabled = false; }
   });
 }
 

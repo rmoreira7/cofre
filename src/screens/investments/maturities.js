@@ -14,6 +14,7 @@ export function render(t) {
   const { mat, lad, reserve } = t;
   const sub = mat.total ? `${[...new Set(mat.rows.map((r) => bankName(r.bank) + (r.joint ? " (conjunta)" : "")))].join(" + ")} · ${mil(mat.total)}` : "";
   return `    <div class="row mb10"><div class="sub">${esc(sub)}</div><button class="lnk" data-a="ics">${CAL_ICON} Agenda</button></div>
+    <div class="card muted sm" data-icshint hidden>${ICS_HINT}</div>
     ${lad.total ? ladderCard(lad, reserve) + planCard(lad) + aheadCard(lad) : ""}
     <div class="seg">${[["90", "90 dias"], ["365", "12 meses"], ["all", "Todos"]].map(([f, l]) => `<button data-f="${f}" class="${f === filter ? "on" : ""}">${l}</button>`).join("")}</div>
     <div class="card" data-list></div>
@@ -37,11 +38,13 @@ export function bind(pane, t) {
   pane.onclick = (e) => {
     const f = e.target.closest("[data-f]")?.dataset.f;
     if (f) { filter = f; pane.querySelectorAll(".seg button").forEach((b) => b.classList.toggle("on", b.dataset.f === f)); paint(); }
-    if (e.target.closest('[data-a="ics"]')) download("cofre-vencimentos.ics", new Blob([maturitiesIcs(mat.rows.filter((r) => r.days >= 0), { bankName, money: (n) => brl(n, 2) })], { type: "text/calendar" }));
+    if (e.target.closest('[data-a="ics"]')) download("cofre-vencimentos.ics", new Blob([maturitiesIcs(mat.rows.filter((r) => r.days >= 0), { bankName, money: (n) => brl(n, 2) })], { type: "text/calendar" })), pane.querySelector("[data-icshint]").hidden = false;
   };
   paint();
 }
 
+// Google Calendar drops colors from imported files, so the color comes from the calendar the events go into.
+const ICS_HINT = `<b>Na cor Tangerina, no Google Agenda:</b> no computador, em calendar.google.com, crie uma agenda <b>Cofre</b> e mude a cor dela para <b>Tangerina</b> (uma vez só). Depois: Configurações › Importar e exportar › escolha o arquivo e a agenda Cofre. Importar de novo atualiza os eventos, sem duplicar.`;
 const CAL_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M12 13v5M9.5 15.5h5"/></svg>`;
 const termTxt = (m) => (m % 12 === 0 ? `${m / 12} ${m === 12 ? "ano" : "anos"}` : `${m} meses`);
 const pc = (x) => pct(x * 100, 1);
