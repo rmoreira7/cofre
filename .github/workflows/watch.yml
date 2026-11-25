@@ -1,7 +1,7 @@
 name: watch
 on:
-  schedule:
-    - cron: "0 11 * * *" # 08:00 BRT, after Pluggy's evening sync of each bank
+  # Started at 08:00 BRT by an external cron (cron-job.org), not by `schedule:`:
+  # GitHub skipped scheduled runs here, and a second run on the same day would resend the open decisions.
   workflow_dispatch:
     inputs:
       digest:
