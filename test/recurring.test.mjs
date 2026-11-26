@@ -60,3 +60,11 @@ test("Ajustes › Contas: Adicionar opens the conta form prefilled; Ignorar hide
   assert.equal(recurring(series("Streaming X", 39.9, MONTHS), { today, ignored: data.ignoredRecurring }).length, 0);
   assert.ok(painted >= 2);
 });
+
+test("a merchant padded with its city and country on some months is still the same charge", () => {
+  const xs = [...series("CLUBE K", 46, MONTHS.slice(0, 5)), row("2026-11-15", 46, "CLUBE K      CIDADE      BR")];
+  const [r] = recurring(xs, { today: "2026-12-10" });
+  assert.equal(r.n, 6);
+  assert.equal(r.last, "2026-11-15");
+  assert.deepEqual(r.match, ["CLUBE K"]);
+});

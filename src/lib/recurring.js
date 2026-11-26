@@ -11,12 +11,15 @@ const monthly = (g) => g >= 20 && g <= 40, skipped = (g) => g >= 52 && g <= 70; 
 const median = (a) => { const s = [...a].sort((x, y) => x - y), n = s.length; return n % 2 ? s[n >> 1] : (s[n / 2 - 1] + s[n / 2]) / 2; };
 const plain = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "");
 
-export const recurringKey = (r) => `${r.src}:${merchantOf(r.desc).toLowerCase().replace(/\s+/g, " ")}`;
+// Some issuers pad the merchant to a fixed width and add the city and country ("LOJA X      CIDADE      BR"), and only
+// on some months: the merchant is what comes before the padding.
+const merchant = (desc) => merchantOf(desc).split(/\s{3,}/)[0].trim();
+export const recurringKey = (r) => `${r.src}:${merchant(r.desc).toLowerCase().replace(/\s+/g, " ")}`;
 
 // Covered: a conta's match text is in the charge, or a renewal's name and the merchant contain one another (single
 // words would match too much: "clube" is in more than one plan).
 function covered(desc, lists) {
-  const d = String(desc || "").toLowerCase(), p = plain(merchantOf(desc));
+  const d = String(desc || "").toLowerCase(), p = plain(merchant(desc));
   if ((lists.monthly || []).some((m) => (m.match || []).some((x) => d.includes(x.toLowerCase())))) return true;
   return p.length >= 5 && (lists.renewals || []).some((r) => { const w = plain(r.name); return w.length >= 5 && (p.includes(w) || w.includes(p)); });
 }
@@ -49,7 +52,7 @@ export function recurring(rows, { lists = {}, ignored = [], today }) {
     const days = run.map((x) => Number(x.d.slice(8, 10)));
     // A fixed day of the month when the charges keep to it (month ends wrap: the 30th and the 2nd are 3 days apart).
     const day = Math.round(median(days)), drift = Math.max(...days.map((d) => Math.min(Math.abs(d - day), 31 - Math.abs(d - day))));
-    const name = merchantOf(last.desc);
+    const name = merchant(last.desc);
     out.push({
       key, name: name.toLowerCase().replace(/(^|\s)\p{L}/gu, (c) => c.toUpperCase()), src: last.src, card: last.src === "card",
       amount: Math.round(last.amt * 100) / 100, match: [name],
