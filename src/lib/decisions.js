@@ -18,7 +18,7 @@ export function upcomingRenewals(list, today, within = 60) {
 
 // Monthly bills paid by hand (phone, internet, classes), from the rules file's `monthly`: [{ name, day: 1–31 | every:
 // days, amount?, match?: [text in the transaction's description], note? }]. `day`: due on that day of every month.
-// `every`: due that many days after the last matching payment, a weekend moved to the Monday (a plan that renews from
+// `every`: due that many days after the last matching payment, a Friday to Sunday moved to the Monday (a plan that renews from
 // the day it is paid). Each due date is one decision, closed by itself when a matching transaction (card or account)
 // shows up in the 25 days before it.
 const matches = (m) => Array.isArray(m.match) && m.match.length > 0 && m.match.every((x) => typeof x === "string" && x.trim());
@@ -45,10 +45,12 @@ function paymentsOf(snapshot, m) {
   return out.sort((a, b) => b.date.localeCompare(a.date));
 }
 const weekday = (iso) => new Date(iso + "T12:00:00Z").getUTCDay();
-export const toMonday = (iso) => (weekday(iso) === 6 ? addDays(iso, 2) : weekday(iso) === 0 ? addDays(iso, 1) : iso);
+// Friday to Sunday count as the weekend: the plan renews on the Monday after.
+const TO_MONDAY = { 5: 3, 6: 2, 0: 1 };
+export const toMonday = (iso) => addDays(iso, TO_MONDAY[weekday(iso)] || 0);
 
 // The bill still to pay. By day: this month's until 3 days past its date, then next month's. Rolling (`every`): the
-// last payment + every days, on a weekday; null before the first payment is seen.
+// last payment + every days, Monday to Thursday; null before the first payment is seen.
 export function monthlyDue(m, today, snapshot = null) {
   if (m.every) {
     const last = paymentsOf(snapshot, m)[0];

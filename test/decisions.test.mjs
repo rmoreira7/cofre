@@ -121,20 +121,21 @@ test("monthly bills open 10 days ahead, close themselves when the matching charg
 
 import { nextMonthly, toMonday } from "../src/lib/decisions.js";
 
-test("rolling bills: due `every` days after the last payment, a weekend moved to Monday; paying moves it on", () => {
+test("rolling bills: due `every` days after the last payment, a Friday to Sunday moved to Monday; paying moves it on", () => {
   const plan = { name: "Aulas", every: 30, match: ["Prof X"] };
   assert.ok(validMonthly([plan]));
   assert.ok(!validMonthly([{ name: "Aulas", every: 30 }]), "rolling needs a match");
   assert.equal(toMonday("2026-12-05"), "2026-12-07");
   assert.equal(toMonday("2026-12-06"), "2026-12-07");
-  assert.equal(toMonday("2026-12-04"), "2026-12-04");
+  assert.equal(toMonday("2026-12-04"), "2026-12-07", "Friday too");
+  assert.equal(toMonday("2026-12-03"), "2026-12-03");
   const pix = (...ds) => ({ items: [{ label: "bank_x", accounts: [{ type: "BANK", transactions: ds.map(([d, a]) => ({ date: `${d}T10:00:00Z`, description: "Pix enviado|prof x", amount: -a })) }] }] });
   assert.deepEqual(nextMonthly([plan], "2026-11-26", { items: [] }), [], "no payment seen yet → nothing");
   const s1 = pix(["2026-10-05", 160], ["2026-11-04", 190]);
   const [m] = nextMonthly([plan], "2026-11-26", s1);
-  assert.deepEqual([m.due, m.amount, m.days], ["2026-12-04", 190, 8]);
+  assert.deepEqual([m.due, m.amount, m.days], ["2026-12-07", 190, 11], "04/11 + 30 = Fri 04/12 → Mon 07/12");
   assert.equal(nextMonthly([plan], "2026-11-26", pix(["2026-11-06", 190]))[0].due, "2026-12-07", "06/11 + 30 = Sat 06/12 → Mon");
-  const open = candidates(v, { lad, monthly: [plan], snapshot: s1, today: "2026-11-26" }).find((d) => d.kind === "monthly");
+  const open = candidates(v, { lad, monthly: [plan], snapshot: s1, today: "2026-11-28" }).find((d) => d.kind === "monthly");
   assert.equal(open.id, "mon:Aulas:2026-12");
   const s2 = pix(["2026-11-04", 190], ["2026-12-02", 210]);
   assert.ok(!candidates(v, { lad, monthly: [plan], snapshot: s2, today: "2026-12-03" }).some((d) => d.kind === "monthly"), "paid → the next one is 30 days out");
