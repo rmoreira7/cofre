@@ -1,19 +1,17 @@
 // Gastos › Ciclo: how much is left to spend this cycle, and what came in against what went out.
-import { brl, MESES, ddmm, MES } from "../../lib/format.js";
+import { brl, MESES, ddmm, MES, esc } from "../../lib/format.js";
 import { ONE_OFF } from "../../lib/spend.js";
+import { paceLabel } from "../../lib/pace.js";
 import { kBRL } from "./common.js";
 
 export const id = "cycle";
 export const label = "Ciclo";
 
 export function render(t) {
-  const { month: v, left: l } = t;
+  const { month: v, left: l, pace: p } = t;
   const C = 2 * Math.PI * 56;
   const share = Math.min(1, v.spent / v.target);
   const m = Number(v.month.slice(5, 7));
-  const elapsed = (v.length - v.daysLeft + 0.5) / v.length;
-  const projected = v.spent / elapsed;
-  const pace = v.over ? ["bad", "acima da meta"] : v.spent / v.target > elapsed + 0.05 ? ["warn", "acima do ritmo"] : ["", "no ritmo da meta"];
   return `    <div class="sub mb10">${MESES[m - 1]}${v.cycle ? ` · ciclo ${ddmm(v.start)}–${ddmm(v.end)}` : ""} · ${v.daysLeft} ${v.daysLeft === 1 ? "dia restante" : "dias restantes"}</div>
     <div class="card">
       <div class="row">
@@ -21,14 +19,27 @@ export function render(t) {
           <circle cx="66" cy="66" r="56" fill="none" stroke="var(${v.over ? "--bad" : "--brand"})" stroke-width="12" stroke-linecap="round" transform="rotate(-90 66 66)" stroke-dasharray="${C * share} ${C}"/></svg>
           <div class="c"><b>${brl(v.spent)}</b><span class="muted">de ${brl(v.target)}</span></div></div>
         <div class="grow">
-          <div class="label">Pode gastar por dia</div><div class="kpi${v.over ? " bad" : ""}">${brl(v.perDay)}</div>
+          <div class="label">Livre por dia</div><div class="kpi${p.free < 0 ? " bad" : ""}">${brl(p.perDay)}</div>
           <div class="muted mt6">${v.left >= 0 ? `Restam <b class="ink">${brl(v.left)}</b> até ${ddmm(v.end)}` : `Passou <b class="bad">${brl(-v.left)}</b> da meta`}</div>
-          ${v.daysLeft > 1 && v.spent > 0 ? `<div class="muted sm mt6">No ritmo, fecha em ~<b class="ink">${kBRL(projected)}</b></div>` : ""}
-          <span class="chip ${pace[0]} mt10">${pace[1]}</span>
+          ${p.committedTotal ? `<div class="muted sm mt6">${p.free >= 0 ? "já tirando" : "e ainda vêm"} ${brl(p.committedTotal)} de contas</div>` : ""}
+          ${p.projected ? `<div class="muted sm mt6">No ritmo de sempre, fecha em ~<b class="ink">${kBRL(p.projected)}</b></div>` : ""}
+          <span class="chip ${p.tone} mt10">${paceLabel(p, brl)}</span>
         </div>
       </div>
     </div>
+    ${paceCard(v, p)}
     ${leftoverCard(v, l)}`;
+}
+
+// The pace, explained: what is usually gone by this day of the cycle, and the contas still to come before the close.
+function paceCard(v, p) {
+  const lines = p.committed.map((c) => `<div><span>${ddmm(c.date)} ${esc(c.name)}</span><span>${brl(c.amount)}</span></div>`).join("");
+  return `<div class="card">
+      <div class="label">Ritmo</div>
+      <div class="muted sm mt6">${p.early ? "Começo do ciclo: cedo para comparar." : `Até hoje você costuma ter gasto <b class="ink">${Math.round(p.share * 100)}%</b> do ciclo (${brl(p.expected)} da meta); gastou ${brl(v.spent)}.`}
+        ${p.usual ? `Base: ${p.usual} ciclos anteriores.` : "Sem 3 ciclos anteriores: ritmo linear."}</div>
+      ${lines ? `<div class="label mt10">Ainda vêm até ${ddmm(v.end)}</div><div class="dlist">${lines}</div>` : ""}
+    </div>`;
 }
 
 const tone = (x) => (x < 0 ? "bad" : "ok");

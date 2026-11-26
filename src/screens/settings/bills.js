@@ -6,20 +6,28 @@ import { listsOf, withList, monthlyFrom, renewalFrom } from "../../lib/lists.js"
 export const id = "bills";
 export const label = "Contas";
 
-let editing = null; // { kind, i } (i = -1: new)
+let editing = null; // { kind, i, draft? } (i = -1: new; draft: prefilled from a recurring charge)
 
 export function render(t, ctx) {
   const l = listsOf(ctx.data);
   const src = l.own ? "Editadas neste aparelho · vão para o Telegram com as decisões." : "Vêm do arquivo de regras. Ao editar aqui, passam a ser deste aparelho.";
   return `<div class="muted sm">${src}${l.own && !ctx.data.rules?.sync?.gist ? " <b>Sem sincronização com o Telegram</b> (o arquivo de regras não tem o gist)." : ""}</div>
+    ${foundCard(t.recurring || [])}
     <div class="sec">Contas do mês</div>${listCard("monthly", l.monthly, monthlyLine)}
     <div class="sec">Renovações</div>${listCard("renewals", l.renewals, renewalLine)}`;
+}
+
+// Charges that come back every month and are in no list yet: one tap prefills the form, or hides them for good.
+function foundCard(found) {
+  if (!found.length) return "";
+  const rows = found.map((r, i) => `<div class="row bl"><span class="l"><b>${esc(r.name)}</b><small>${brl(r.amount, 2)} · ${r.day ? `todo dia ${r.day}` : `a cada ~${r.every} dias`} · ${r.card ? "no cartão" : "na conta"} · ${r.n} meses seguidos</small></span><span class="nw"><button class="lnk" data-r="add:${i}">Adicionar</button> <button class="lnk muted" data-r="ignore:${i}">Ignorar</button></span></div>`).join("");
+  return `<div class="sec">Encontradas no extrato</div><div class="card"><div class="muted sm">Cobranças que se repetem todo mês e ainda não estão nas contas nem nas renovações.</div>${rows}</div>`;
 }
 
 function listCard(kind, list, line) {
   const rows = list.map((x, i) => editing?.kind === kind && editing.i === i ? form(kind, x) : `<div class="row bl"><span class="l">${line(x)}</span><span class="nw"><button class="lnk" data-e="${kind}:${i}">Editar</button></span></div>`).join("");
   const adding = editing?.kind === kind && editing.i === -1;
-  return `<div class="card">${rows || '<div class="muted">Nenhuma.</div>'}${adding ? form(kind, {}) : `<button class="lnk mt10" data-e="${kind}:-1">+ Adicionar</button>`}</div>`;
+  return `<div class="card">${rows || '<div class="muted">Nenhuma.</div>'}${adding ? form(kind, editing.draft || {}) : `<button class="lnk mt10" data-e="${kind}:-1">+ Adicionar</button>`}</div>`;
 }
 
 const monthlyLine = (m) => `<b>${esc(m.name)}</b><small>${m.every ? `a cada ${m.every} dias depois do último pagamento (sexta a domingo → segunda)` : `todo dia ${m.day}`}${m.amount != null ? ` · ~${brl(m.amount, 2)}` : ""}${m.card ? " · no cartão" : ""}${m.match?.length ? ` · fecha com "${esc(m.match.join('" ou "'))}"` : ""}${m.note ? ` · ${esc(m.note)}` : ""}</small>`;
@@ -63,6 +71,15 @@ export function bind(pane, t, ctx, { repaint }) {
     editing = null; repaint(); ctx.syncNow?.();
   };
   pane.onclick = async (e) => {
+    const rc = e.target.closest("[data-r]")?.dataset.r;
+    if (rc) {
+      const [act, i] = rc.split(":"), r = (t.recurring || [])[Number(i)];
+      if (!r) return;
+      if (act === "ignore") { await ctx.save({ ...ctx.data, ignoredRecurring: [...(ctx.data.ignoredRecurring || []), r.key] }); repaint(); return; }
+      const { name, amount, match, card, day, every } = r;
+      editing = { kind: "monthly", i: -1, draft: { name, amount, match, card, ...(day ? { day } : { every }) } };
+      repaint(); pane.querySelector("form.edit input")?.focus(); return;
+    }
     const ed = e.target.closest("[data-e]")?.dataset.e;
     if (ed) { const [kind, i] = ed.split(":"); editing = { kind, i: Number(i) }; repaint(); pane.querySelector("form.edit input")?.focus(); return; }
     const mode = e.target.closest("[data-mode]")?.dataset.mode;

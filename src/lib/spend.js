@@ -195,6 +195,8 @@ export function salaryForecast(income, { today, days = 30 }) {
 
 function row(d, amt, cat, src, x, cycles) {
   const r = { d, m: d.slice(0, 7), amt, cat, cluster: clusterOf(cat), src, desc: x.description, pending: x.status === "PENDING", _x: x };
+  // One payment of a purchase split in installments: monthly by construction, never a subscription.
+  if ((x.creditCardMetadata || x.card)?.paymentType === "INSTALLMENT" || /\s\d{1,2}\/\d{1,2}\s*$|parcela/i.test(x.description || "")) r.inst = true;
   if (cycles) {
     // A card purchase belongs to the bill the issuer put it on (forecast month − 1 = the cycle's name).
     const f = (x.creditCardMetadata || x.card)?.billForecastDate?.slice(0, 7);

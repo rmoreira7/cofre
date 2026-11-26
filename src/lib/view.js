@@ -7,6 +7,8 @@ import { daysBetween } from "./format.js";
 import { agenda, cashOf } from "./agenda.js";
 import { listsOf } from "./lists.js";
 import { closing } from "./closing.js";
+import { pace } from "./pace.js";
+import { recurring } from "./recurring.js";
 import { income as investIncome, mergeLog, monthlyHistory, maturityEarnings } from "./income.js";
 
 export function buildView(data, today) {
@@ -53,6 +55,8 @@ export function buildView(data, today) {
   v.history = monthlyHistory(mergeLog(rules?.invHistory, data.invLog), Object.fromEntries(v.income.banks.map((b) => [b.label, b.net])));
   v.alerts = alerts(v, { idleCash: s.idleCash ?? 5000, cdbMin: s.cdbMin ?? 110 });
   v.closing = closing({ rows, income, month, cycles, target: s.target ?? DEFAULT_TARGET, limits: s.limits || {}, log: mergeLog(rules?.invHistory, data.invLog), own: mine.banks.map((b) => b.label), bills: v.bills, today });
+  v.pace = pace(month, { rows, cycles, monthly: lists.monthly, renewals: lists.renewals, snapshot: snap, today });
+  v.recurring = recurring(rows, { lists, ignored: data.ignoredRecurring || [], today });
   v.cash = cashOf(mine, { earmark: s.billReserve || 0 });
   v.agenda = agenda({ cards: v.cards, bills: v.bills, mat: v.mat, salary: salaryForecast(income, { today, days: 90 }), monthly: lists.monthly, renewals: lists.renewals, snapshot: snap, cash: v.cash, today, days: 90 });
   v.timeline = v.agenda.filter((e) => e.late || daysBetween(today, e.date) <= 30);
