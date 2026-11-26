@@ -9,7 +9,7 @@ import { earnWhy, earnDone } from "../../ui/earn.js";
 export const id = "decisions";
 export const label = (t) => (t.board.open.length ? `Decisões · ${t.board.open.length}` : "Decisões");
 
-const KIND = { bill: "Fatura", maturity: "Vencimento", idle: "Dinheiro parado", fgc: "FGC", renewal: "Renovação" };
+const KIND = { bill: "Fatura", maturity: "Vencimento", idle: "Dinheiro parado", fgc: "FGC", renewal: "Renovação", monthly: "Conta do mês" };
 const money = (n) => brl(n, Math.abs(n) < 100 ? 2 : 0);
 const dmy = (iso) => `${ddmm(iso)}/${iso.slice(2, 4)}`;
 const left = (d) => (d.days < 0 ? `venceu há ${-d.days} ${d.days === -1 ? "dia" : "dias"}` : d.days === 0 ? "hoje" : d.days === 1 ? "amanhã" : `em ${d.days} dias`);
@@ -57,6 +57,7 @@ function why(d) {
   if (d.kind === "idle") return `${brl(d.detail.balance)} na conta · reserva de ${brl(d.detail.reserve)} (Ajustes › Metas)`;
   if (d.kind === "fgc") return `${brl(d.detail.total)} neste emissor · o FGC cobre até R$ 250 mil`;
   if (d.kind === "renewal") return d.detail ? esc(d.detail) : "";
+  if (d.kind === "monthly") return [d.amount != null && "valor aproximado", d.detail && esc(d.detail), d.match?.length && "fecha sozinha quando a cobrança aparecer"].filter(Boolean).join(" · ");
   if (d.kind === "maturity") return earnWhy(d.earn);
   return "";
 }
@@ -69,7 +70,7 @@ function openCard(open) {
       const due = d.kind === "idle" ? `<span class="due bad">${d.cost ? `custa ~${money(d.cost)}/dia útil` : "parado"}</span>`
         : d.kind === "fgc" ? `<span class="due bad">acima do FGC</span>` : `<span class="due${d.days <= 3 ? " warn" : ""}">${left(d)} · ${ddmm(d.due)}</span>`;
       const sug = d.kind === "maturity" ? `<div class="sug">${d.brb ? "<b>Não renovar no BRB.</b> " : ""}${d.suggestion ? `<b>Sugestão:</b> ${d.suggestion.map((s) => `${brl(s.amount)} em ${s.term}${s.rung ? ` (faixa ${s.rung})` : ""}`).join(" · ")} · ` : ""}${esc(d.rule)}${d.cost ? ` · cada dia útil sem aplicar custa ${money(d.cost)}` : ""}</div>` : "";
-      const yes = d.kind === "bill" ? "Paga" : "Feito";
+      const yes = d.kind === "bill" || d.kind === "monthly" ? "Paga" : "Feito";
       return `<div class="dec">
           <span class="kind">${KIND[d.kind]}${d.joint ? " · conta conjunta" : ""}</span>
           <div class="h"><b>${amount}</b>${due}</div>
@@ -99,6 +100,7 @@ function outcomeText(r, today) {
     return today < d.due ? `aguardando o vencimento (${ddmm(d.due)})` : "esperando a aplicação aparecer nos dados (cerca de 1 dia)";
   }
   if (d.kind === "idle") return o.state === "ok" ? `confirmado: conta em ${brl(o.balance)}` : o.state === "no" ? `ainda ${brl(o.balance)} na conta` : `conta em ${brl(o.balance)} · confere por 7 dias`;
+  if (d.kind === "monthly") return o.state === "ok" ? `confirmado: ${brl(o.paid)} em ${ddmm(o.date)}` : o.state === "manual" ? "marcado por você" : o.state === "no" ? "a cobrança não apareceu até 3 dias depois do vencimento" : "esperando a cobrança aparecer nos dados";
   if (d.kind === "bill") return o.state === "ok" ? `confirmado: pagamento de ${brl(o.paid)}` : o.state === "no" ? "o pagamento não apareceu até 3 dias depois do vencimento" : "esperando o pagamento aparecer nos dados (cerca de 1 dia)";
   return "";
 }
@@ -108,7 +110,7 @@ function decidedCard(list, today) {
   const n = (s) => list.filter((r) => r.outcome.state === s).length;
   return `<div class="card"><div class="row"><div class="label">Decididas</div><span class="muted sm">os dados confirmam?</span></div>
     <div class="kpis"><div><span class="muted sm">Confirmadas</span><b class="ok">${n("ok")}</b></div><div><span class="muted sm">Aguardando</span><b class="warn">${n("wait")}</b></div><div><span class="muted sm">Não achadas</span><b>${n("no")}</b></div></div>
-    <div class="mt6">${list.slice(0, 12).map((r) => `<div class="out"><i class="${r.outcome.state}">${ICON[r.outcome.state]}</i><div class="t">${esc(r.d.title)}${r.d.amount != null ? ` · ${brl(r.d.amount)}` : ""}<small>${r.status === "other" ? "Decidido" : r.d.kind === "bill" ? "Paga" : "Feito"} em ${ddmm(r.at)}${r.by === "telegram" ? " pelo Telegram" : ""}${r.d.kind === "maturity" ? earnDone(r.d.earn) : ""} · ${outcomeText(r, today)}</small></div><button class="lnk muted" data-act="undo" data-d="${esc(r.id)}">Desfazer</button></div>`).join("")}</div>
+    <div class="mt6">${list.slice(0, 12).map((r) => `<div class="out"><i class="${r.outcome.state}">${ICON[r.outcome.state]}</i><div class="t">${esc(r.d.title)}${r.d.amount != null ? ` · ${brl(r.d.amount)}` : ""}<small>${r.status === "other" ? "Decidido" : r.d.kind === "bill" || r.d.kind === "monthly" ? "Paga" : "Feito"} em ${ddmm(r.at)}${r.by === "telegram" ? " pelo Telegram" : ""}${r.d.kind === "maturity" ? earnDone(r.d.earn) : ""} · ${outcomeText(r, today)}</small></div><button class="lnk muted" data-act="undo" data-d="${esc(r.id)}">Desfazer</button></div>`).join("")}</div>
   </div>`;
 }
 

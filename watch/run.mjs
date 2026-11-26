@@ -4,7 +4,7 @@
 // env: PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET, PLUGGY_ITEMS ("label:id,…"), COFRE_ENTITIES (rules.entities JSON),
 //      TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, COFRE_STATE_KEY + STATE_PATH (buttons; without them, plain messages),
 //      COFRE_PHONE_GIST (optional: the phone's decisions, merged in),
-//      OPENAI_API_KEY (optional: explanations), OPENAI_MODEL, COFRE_RENEWALS (optional JSON list),
+//      OPENAI_API_KEY (optional: explanations), OPENAI_MODEL, COFRE_RENEWALS + COFRE_MONTHLY (optional JSON lists),
 //      DRY_RUN=1 (print instead of send), FORCE_DIGEST=1 (treat today as Monday), TODAY=YYYY-MM-DD (test a date).
 import { createPluggy } from "../src/lib/pluggy.js";
 import { slim } from "../src/lib/model.js";
@@ -52,11 +52,13 @@ function reportText(r, o) {
     if (d.kind === "maturity") return `✅ <b>${d.title}</b> confirmado: ${o.n} ${o.n === 1 ? "aplicação nova" : "aplicações novas"}${o.cdi ? ` a ${Math.round(o.cdi)}% CDI` : ""}${o.cdi && d.cdbMin && o.cdi < d.cdbMin ? ` (abaixo do mínimo de ${d.cdbMin}%)` : ""}.`;
     if (d.kind === "idle") return `✅ <b>${d.name}</b>: conta de volta perto da reserva.`;
     if (d.kind === "bill") return `✅ <b>Fatura ${d.name}</b> paga: o pagamento apareceu.`;
+    if (d.kind === "monthly") return `✅ <b>${d.name}</b> paga: a cobrança apareceu.`;
   }
   if (o.state === "no") {
     if (d.kind === "maturity") return `⚠️ <b>${d.title}</b>: marcado Feito em ${ddmm(r.at)}, mas não achei aplicação nova no banco. Volta a aparecer como decisão.`;
     if (d.kind === "idle") return `⚠️ <b>${d.name}</b>: marcado Feito em ${ddmm(r.at)}, mas o dinheiro continua na conta.`;
     if (d.kind === "bill") return `⚠️ <b>Fatura ${d.name}</b>: marcada como paga, mas o pagamento não apareceu.`;
+    if (d.kind === "monthly") return `⚠️ <b>${d.name}</b>: marcada como paga, mas a cobrança não apareceu.`;
   }
   return null;
 }
@@ -70,6 +72,8 @@ const items = need("PLUGGY_ITEMS").split(",").filter((x) => x.trim()).map((x) =>
 const rules = { entities: JSON.parse(need("COFRE_ENTITIES")) };
 // Optional: subscriptions and annual plans to warn about before they renew (a private secret, never in the repo).
 const renewals = process.env.COFRE_RENEWALS ? JSON.parse(process.env.COFRE_RENEWALS) : [];
+// Optional: monthly bills paid by hand ({ name, day, amount?, match? }), same kind of secret.
+const monthly = process.env.COFRE_MONTHLY ? JSON.parse(process.env.COFRE_MONTHLY) : [];
 const today = process.env.TODAY || localToday();
 const tg = dry ? null : createTelegram({ token: need("TELEGRAM_BOT_TOKEN"), chatId: need("TELEGRAM_CHAT_ID") });
 const statePath = process.env.STATE_PATH, stateKey = process.env.COFRE_STATE_KEY;
@@ -105,7 +109,7 @@ const quiet = (id) => {
   if (r.status === "snoozed") return r.until > today;
   return out.get(id)?.state !== "no";
 };
-const d = decide(view(snap, rules, today), { today, cdiDaily: await cdiDaily(), renewals, idleCash: IDLE_CASH, quiet, ...(process.env.FORCE_DIGEST === "1" && { monday: true }) });
+const d = decide(view(snap, rules, today), { today, cdiDaily: await cdiDaily(), renewals, monthly, snapshot: snap, idleCash: IDLE_CASH, quiet, ...(process.env.FORCE_DIGEST === "1" && { monday: true }) });
 let tokens = 0;
 for (const u of d.urgent.filter((u) => u.facts).slice(0, MAX_EXPLAIN)) {
   const r = await explain(u.facts, { apiKey: process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL || MODEL });

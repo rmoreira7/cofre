@@ -16,6 +16,43 @@ export function upcomingRenewals(list, today, within = 60) {
     .sort((a, b) => a.days - b.days);
 }
 
+// Monthly bills paid by hand (phone, internet), from the rules file's `monthly`: [{ name, day: 1–31, amount?, match?:
+// [text in the charge's description], note? }]. Each month's bill is one decision, closed by itself when a transaction
+// whose description contains one of `match` shows up (card or account) in the month before its due date.
+export function validMonthly(list) {
+  return Array.isArray(list) && list.every((m) => m && typeof m.name === "string" && Number.isInteger(m.day) && m.day >= 1 && m.day <= 31
+    && (m.amount == null || Number.isFinite(m.amount)) && (m.note == null || typeof m.note === "string")
+    && (m.match == null || (Array.isArray(m.match) && m.match.every((x) => typeof x === "string" && x.trim()))));
+}
+
+const dueIn = (y, mo, day) => { const last = new Date(Date.UTC(y, mo, 0)).getUTCDate(); return `${y}-${String(mo).padStart(2, "0")}-${String(Math.min(day, last)).padStart(2, "0")}`; };
+// The bill still to pay: this month's until 3 days past its date, then next month's.
+export function monthlyDue(m, today) {
+  let y = Number(today.slice(0, 4)), mo = Number(today.slice(5, 7));
+  for (let k = 0; k < 3; k++) {
+    const due = dueIn(y, mo, m.day);
+    if (addDays(due, 3) >= today) return due;
+    if (++mo === 13) { y++; mo = 1; }
+  }
+  return null;
+}
+export const nextMonthly = (list, today) => (list || []).map((m) => { const due = monthlyDue(m, today); return { ...m, due, days: daysBetween(today, due) }; });
+
+// The transaction that paid a monthly bill due on `due`: matched by description, from 25 days before to 3 after.
+export function monthlyPayment(snapshot, m, due) {
+  const keys = (m.match || []).map((x) => x.toLowerCase());
+  if (!keys.length) return null;
+  const from = addDays(due, -25), to = addDays(due, 3);
+  for (const it of snapshot?.items || []) {
+    if (it.error) continue;
+    for (const a of it.accounts || []) for (const t of a.transactions || []) {
+      const d = t.date?.slice(0, 10), desc = String(t.description || "").toLowerCase();
+      if (d >= from && d <= to && keys.some((k) => desc.includes(k))) return { date: d, amount: Math.abs(t.amount), bank: it.label };
+    }
+  }
+  return null;
+}
+
 // What money parked in a checking account costs per business day at today's CDI (% per business day).
 export const idleCost = (amount, cdiDaily) => (cdiDaily ? (amount * cdiDaily) / 100 : null);
 
@@ -33,7 +70,7 @@ const addDays = (iso, n) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCDa
 const term = (m) => (m % 12 === 0 ? `${m / 12} ${m === 12 ? "ano" : "anos"}` : `${m} meses`);
 
 // v: the app's view (cards, mat, wealth, guarantee); lad: the ladder simulation (its plan sizes each maturity's split).
-export function candidates(v, { lad, renewals = [], idleCash = 5000, cdbMin = 110, cdiDaily = null, today }) {
+export function candidates(v, { lad, renewals = [], monthly = [], snapshot = null, idleCash = 5000, cdbMin = 110, cdiDaily = null, today }) {
   const out = [];
   for (const c of v.cards) {
     if (!c.due || !(c.bill > 0)) continue;
@@ -58,6 +95,10 @@ export function candidates(v, { lad, renewals = [], idleCash = 5000, cdbMin = 11
   }
   for (const e of v.guarantee?.issuers.filter((x) => x.over) || []) out.push({ id: `fgc:${e.issuer}`, kind: "fgc", title: `Tirar o excesso de ${e.issuer}`, issuer: e.issuer, due: today, days: 0, amount: e.over, joint: e.joint, detail: { total: e.amount } });
   for (const r of upcomingRenewals(renewals, today, RENEWAL_WINDOW)) out.push({ id: `ren:${r.name}:${r.date}`, kind: "renewal", title: `${r.name} renova`, name: r.name, due: r.date, days: r.days, amount: r.amount ?? null, every: r.every, detail: r.note || null });
+  for (const m of nextMonthly(monthly, today)) {
+    if (m.days > BILL_WINDOW || monthlyPayment(snapshot, m, m.due)) continue;
+    out.push({ id: `mon:${m.name}:${m.due.slice(0, 7)}`, kind: "monthly", title: `Pagar ${m.name}`, name: m.name, due: m.due, days: m.days, amount: m.amount ?? null, match: m.match || [], detail: m.note || null });
+  }
   return out.sort((a, b) => a.days - b.days || (b.amount || 0) - (a.amount || 0));
 }
 
@@ -111,6 +152,12 @@ export function outcome(rec, snapshot, { today, idleCash = 5000 } = {}) {
     const paid = (card?.transactions || []).filter((t) => t.operationType === "PAGAMENTO_FATURA" && t.date.slice(0, 10) >= addDays(rec.at, -3) && t.date.slice(0, 10) <= addDays(d.due, 3)).reduce((a, t) => a - t.amount, 0);
     if (paid >= 0.9 * d.amount) return { state: "ok", paid };
     return { state: today > addDays(d.due, 3) ? "no" : "wait", paid };
+  }
+  if (d.kind === "monthly") {
+    const paid = monthlyPayment(snapshot, d, d.due);
+    if (paid) return { state: "ok", paid: paid.amount, date: paid.date };
+    if (!d.match?.length) return { state: "manual" };
+    return { state: today > addDays(d.due, 3) ? "no" : "wait" };
   }
   if (d.kind === "fgc") return { state: "wait" };
   return { state: "manual" };

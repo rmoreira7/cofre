@@ -119,3 +119,9 @@ test("a bill keeps its event through the month as the amount changes; paid off, 
   assert.equal(paid.removed, 1);
   assert.equal(Object.keys(g.calendars[first.calId]).length, 1, "only the 31/12 reminder is left");
 });
+
+test("monthly bills: one event for the next due date, red, 5 days' notice", async () => {
+  const evs = await calendarEvents({ monthly: [{ name: "Conta A", day: 10, amount: 69.5, note: "no cartão" }], ...base });
+  const m = evs.filter((e) => e.summary === "Pagar Conta A");
+  assert.deepEqual(m.map((e) => [e.start.date, e.description, e.colorId, e.reminders.overrides[0].minutes]), [["2026-12-10", "~R$ 69.5 · no cartão", COLORS.bill, remindAt(5)]]);
+});

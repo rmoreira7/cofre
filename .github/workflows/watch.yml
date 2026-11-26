@@ -38,6 +38,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           COFRE_RENEWALS: ${{ secrets.COFRE_RENEWALS }}
+          COFRE_MONTHLY: ${{ secrets.COFRE_MONTHLY }}
           FORCE_DIGEST: ${{ inputs.digest && '1' || '' }}
           TODAY: ${{ inputs.today }}
           COFRE_STATE_KEY: ${{ secrets.COFRE_STATE_KEY }}

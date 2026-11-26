@@ -1,6 +1,6 @@
 // Transaction categorizer: a port of finance/pluggy/categories.py, generic rules only.
 // Everything personal (payee rules, learned merchant map, overrides) arrives in the imported rules file.
-import { validRenewals } from "./decisions.js";
+import { validRenewals, validMonthly } from "./decisions.js";
 import { validKey } from "./seal.js";
 
 export const RULES_FORMAT = "cofre-rules";
@@ -101,6 +101,7 @@ export function parseRulesFile(text) {
     if (!ok) throw new Error("Histórico de patrimônio inválido.");
   }
   if (raw.renewals != null && !validRenewals(raw.renewals)) throw new Error("Lista de renovações inválida.");
+  if (raw.monthly != null && !validMonthly(raw.monthly)) throw new Error("Lista de contas do mês inválida.");
   if (raw.sync != null) {
     const s = raw.sync;
     const ok = s && validKey(s.key) && /^[\w.-]+\/[\w.-]+$/.test(s.repo || "") && (s.gist == null || (/^[0-9a-f]{20,40}$/.test(s.gist) && /^(github_pat_|ghp_)\w+$/.test(s.token || "")));

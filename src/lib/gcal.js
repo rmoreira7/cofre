@@ -3,7 +3,7 @@
 // tag and an id derived from a stable UID, so a re-sync updates instead of duplicating. Maturities are Tangerina,
 // card bills Tomate, renewals Uva; the 31/12 reminder (open the app so the year-end balances are kept) Grafite.
 import { maturityEvent } from "./ics.js";
-import { upcomingRenewals } from "./decisions.js";
+import { upcomingRenewals, nextMonthly } from "./decisions.js";
 
 export const SCOPE = "https://www.googleapis.com/auth/calendar.app.created";
 export const COLORS = { maturity: "6", bill: "11", renewal: "3", yearend: "8" };
@@ -41,8 +41,9 @@ export async function toGoogle(r, opts) {
 }
 
 // Everything the calendar should hold from today on: maturities (7 days' notice), the open card bills (3 days, like the
-// watcher), renewals within a year (7 days) and this year's 31/12 (the day before).
-export async function calendarEvents({ mat = [], cards = [], renewals = [], today, bankName = (b) => b, money = (n) => n.toFixed(2) }) {
+// watcher), monthly bills (5 days, when they are usually paid), renewals within a year (7 days) and this year's 31/12
+// (the day before).
+export async function calendarEvents({ mat = [], cards = [], renewals = [], monthly = [], today, bankName = (b) => b, money = (n) => n.toFixed(2) }) {
   const out = [];
   for (const r of mat) if (r.due >= today) out.push(await toGoogle(r, { bankName, money }));
   for (const c of cards) {
@@ -53,6 +54,11 @@ export async function calendarEvents({ mat = [], cards = [], renewals = [], toda
   for (const r of upcomingRenewals(renewals, today, 365)) {
     out.push(await gEvent({ uid: `cofre-ren-${slug(r.name)}-${r.date}@cofre`, date: r.date, kind: "renewal", days: 7,
       summary: `Renova: ${r.name}`, description: [r.amount != null && money(r.amount), r.note].filter(Boolean).join(" · ") }));
+  }
+  for (const m of nextMonthly(monthly, today)) {
+    if (m.due < today) continue;
+    out.push(await gEvent({ uid: `cofre-mon-${slug(m.name)}-${m.due.slice(0, 7)}@cofre`, date: m.due, kind: "bill", days: 5,
+      summary: `Pagar ${m.name}`, description: [m.amount != null && `~${money(m.amount)}`, m.note].filter(Boolean).join(" · ") }));
   }
   const ye = `${today.slice(0, 4)}-12-31`;
   out.push(await gEvent({ uid: `cofre-yearend-${ye.slice(0, 4)}@cofre`, date: ye, kind: "yearend", days: 1,

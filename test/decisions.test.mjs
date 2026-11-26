@@ -89,3 +89,32 @@ test("board: decided leaves open, a failed check brings it back, a snooze return
   assert.ok(b.open.some((d) => d.kind === "idle" && d.failed));
   assert.ok(b.open.some((d) => d.kind === "bill"));
 });
+
+import { validMonthly, monthlyDue, monthlyPayment } from "../src/lib/decisions.js";
+
+const monthly = [{ name: "Conta A", day: 10, amount: 200, match: ["Pgt*Conta A"] }, { name: "Conta B", day: 31, amount: 70 }];
+const charged = (date, description, amount = 200) => ({ items: [{ label: "card_a", accounts: [{ type: "CREDIT", transactions: [{ date: `${date}T12:00:00Z`, description, amount }] }] }] });
+
+test("monthly bills: validated; due this month until 3 days past it, then next month; short months clamp", () => {
+  assert.ok(validMonthly(monthly));
+  assert.ok(!validMonthly([{ name: "X", day: 0 }]));
+  assert.ok(!validMonthly([{ name: "X", day: 10, match: "texto" }]));
+  assert.equal(monthlyDue(monthly[0], "2026-12-01"), "2026-12-10");
+  assert.equal(monthlyDue(monthly[0], "2026-12-13"), "2026-12-10");
+  assert.equal(monthlyDue(monthly[0], "2026-12-14"), "2027-01-10");
+  assert.equal(monthlyDue(monthly[1], "2027-02-05"), "2027-02-28");
+});
+
+test("monthly bills open 10 days ahead, close themselves when the matching charge shows up, and are checked", () => {
+  const open = candidates(v, { lad, monthly, snapshot: { items: [] }, today: "2026-12-02" }).filter((d) => d.kind === "monthly");
+  assert.deepEqual(open.map((d) => [d.id, d.days, d.amount]), [["mon:Conta A:2026-12", 8, 200]]);
+  const paid = charged("2026-12-05", "Net PGT*CONTA A");
+  assert.ok(!candidates(v, { lad, monthly, snapshot: paid, today: "2026-12-06" }).some((d) => d.id === "mon:Conta A:2026-12"), "paid → no decision");
+  assert.equal(monthlyPayment(charged("2026-11-10", "Pgt*Conta A"), monthly[0], "2026-12-10"), null, "last month's charge does not count");
+  const rec = decide({}, open[0], "done", { today: "2026-12-02" })[open[0].id];
+  assert.equal(outcome(rec, paid, { today: "2026-12-06" }).state, "ok");
+  assert.equal(outcome(rec, { items: [] }, { today: "2026-12-11" }).state, "wait");
+  assert.equal(outcome(rec, { items: [] }, { today: "2026-12-14" }).state, "no");
+  const noMatch = decide({}, { id: "mon:Conta B:2026-12", kind: "monthly", due: "2026-12-31", match: [] }, "done", { today: "2026-12-25" });
+  assert.equal(outcome(noMatch["mon:Conta B:2026-12"], { items: [] }, { today: "2027-01-10" }).state, "manual");
+});

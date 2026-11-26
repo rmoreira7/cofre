@@ -10,6 +10,8 @@ import { earnText } from "../src/ui/earn.js";
 
 export const MATURITY_DAYS = [7, 3, 1, 0];
 export const BILL_DAYS = [3, 1];
+// Monthly bills (phone, internet) are usually paid about 5 days early: speak then and the day before.
+export const MONTHLY_DAYS = [5, 1];
 export const CONSENT_DAYS = 30;
 export const RENEWAL_DAYS = [30, 7, 1, 0];
 
@@ -28,12 +30,12 @@ const joint = (x) => (x.joint ? " · conta conjunta" : "");
 
 // Each urgent item is { id, d, text, facts? }: d is the decision (kept with the Telegram message for the buttons);
 // facts are what the rules computed, already formatted, and the only numbers an explanation (explain.mjs) may quote.
-export function decide(v, { today, monday = new Date(today + "T12:00:00Z").getUTCDay() === 1, cdiDaily = null, renewals = [], idleCash = 5000, cdbMin = 110, quiet = () => false } = {}) {
+export function decide(v, { today, monday = new Date(today + "T12:00:00Z").getUTCDay() === 1, cdiDaily = null, renewals = [], monthly = [], snapshot = null, idleCash = 5000, cdbMin = 110, quiet = () => false } = {}) {
   const lad = ladder(v.mat.rows, { today });
   const urgent = [], weekly = [];
-  for (const d of candidates(v, { lad, renewals, idleCash, cdbMin, cdiDaily, today })) {
+  for (const d of candidates(v, { lad, renewals, monthly, snapshot, idleCash, cdbMin, cdiDaily, today })) {
     const speaks = d.kind === "maturity" ? MATURITY_DAYS.includes(d.days) : d.kind === "bill" ? BILL_DAYS.includes(d.days)
-      : d.kind === "renewal" ? RENEWAL_DAYS.includes(d.days) : monday; // idle, fgc
+      : d.kind === "renewal" ? RENEWAL_DAYS.includes(d.days) : d.kind === "monthly" ? MONTHLY_DAYS.includes(d.days) : monday; // idle, fgc
     if (!speaks || quiet(d.id)) continue;
     urgent.push({ id: d.id, d, text: text(d), ...(d.kind === "maturity" && { facts: maturityFacts(d, lad.plan.find((x) => x.due === d.due), lad, cdiDaily) }) });
   }
@@ -56,6 +58,7 @@ function text(d) {
     return s + `\n   Mínimo ${d.cdbMin}% CDI (CDB) · outro emissor se houver concentração.`;
   }
   if (d.kind === "bill") return `🧾 <b>Fatura ${esc(d.name)}</b> ${brl(d.amount)} ${when(d.days)} (${ddmm(d.due)})`;
+  if (d.kind === "monthly") return `📱 <b>${esc(d.name)}</b>${d.amount != null ? ` ~${brl(d.amount, 2)}` : ""} ${when(d.days)} (${ddmm(d.due)})${d.detail ? `\n   ${esc(d.detail)}` : ""}`;
   if (d.kind === "renewal") {
     const price = d.amount ? ` · ${brl(d.amount, 2)}${d.every === "month" ? "/mês" : d.every === "year" ? "/ano" : ""}` : "";
     return `🔁 <b>${esc(d.name)}</b> ${d.days === 0 ? "renova hoje" : d.days === 1 ? "renova amanhã" : `renova em ${d.days} dias`} (${ddmm(d.due)})${price}${d.detail ? `\n   ${esc(d.detail)}` : ""}`;

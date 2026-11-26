@@ -62,7 +62,7 @@ export async function syncMessages(state, tg) {
     const note = !r ? null
       : r.status === "snoozed" ? `⏰ Adiado${where} até ${ddmm(r.until)}`
       : r.status === "other" ? `✓ Outra escolha${where} em ${ddmm(r.at)}`
-      : `✓ ${m.d.kind === "bill" ? "Paga" : "Feito"}${where} em ${ddmm(r.at)} · confiro nos dados`;
+      : `✓ ${m.d.kind === "bill" || m.d.kind === "monthly" ? "Paga" : "Feito"}${where} em ${ddmm(r.at)} · confiro nos dados`;
     try {
       await tg.edit(m.mid, note ? `${m.text}\n\n<i>${note}</i>` : m.text, note ? undoButton(k) : buttons(k));
     } catch (e) {

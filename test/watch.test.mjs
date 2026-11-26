@@ -123,3 +123,14 @@ test("explain drops a reply with an invented number, and never throws", async ()
 test("decisionText puts the explanation under its decision, escaped", () => {
   assert.match(decisionText({ text: "💰 X", why: "a < b" }), /💬 <i>a &lt; b<\/i>/);
 });
+
+test("monthly bills speak 5 days and 1 day before, and not once the charge is there", () => {
+  const monthly = [{ name: "Conta A", day: 10, amount: 69.5, match: ["Pgt*Conta A"], note: "no cartão" }];
+  const at = (t, snapshot = { items: [] }) => decide(view(), { today: t, monthly, snapshot }).urgent.filter((u) => u.d.kind === "monthly");
+  assert.equal(at("2026-12-05").length, 1);
+  assert.match(at("2026-12-05")[0].text, /Conta A<\/b> ~R\$ 69,50 .*\(10\/12\)\n   no cartão/);
+  assert.equal(at("2026-12-09").length, 1);
+  assert.equal(at("2026-12-07").length, 0);
+  const paid = { items: [{ label: "x", accounts: [{ transactions: [{ date: "2026-12-04T10:00:00Z", description: "Pgt*Conta A", amount: 69.5 }] }] }] };
+  assert.equal(at("2026-12-05", paid).length, 0);
+});
