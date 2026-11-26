@@ -35,7 +35,9 @@ export const installments = {
     const months = (t.bills || []).filter((m) => !m.open);
     if (!months.length) return '<div class="card empty"><b>Nada parcelado</b>Nenhuma parcela lançada para depois da fatura aberta.</div>';
     const sel = months.find((m) => m.month === picked) || months[0];
-    return `${monthsCard(months, sel)}${linesCard(sel, showAll.ahead)}`;
+    const typical = Math.max(0, ...t.cards.filter((c) => sel.rows.some((r) => r.bank === c.bank)).map((c) => c.typical || 0));
+    const est = typical > sel.amount ? `<div class="card muted sm">Fatura de ${mon(sel.month)} estimada em <b class="ink">~${brl(typical)}</b> (mediana das últimas 6): ${brl(sel.amount)} já parcelados + ~${brl(typical - sel.amount)} de compras ainda por vir.</div>` : "";
+    return `${monthsCard(months, sel)}${est}${linesCard(sel, showAll.ahead)}`;
   },
   bind(pane, t, ctx, { repaint }) {
     pane.onclick = (e) => {

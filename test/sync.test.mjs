@@ -103,3 +103,16 @@ test("the phone's contas do mês and renewals reach the watcher state; an older 
   await from({});
   assert.deepEqual(s.lists, lists, "a phone without lists leaves them");
 });
+
+test("the phone's month-end summary is taken once per period, and not again once sent", async () => {
+  const s = withMsg();
+  const c = { id: "2026-11", spent: 900, target: 700, start: "2026-11-01", end: "2026-11-30", groups: [], overGroups: [] };
+  const from = async (v) => { const b = await seal({ v: 1, decisions: {}, undone: {}, ...v }, key); return pullPhone(s, { gist: "g1", key, fetch: async () => ({ ok: true, status: 200, text: async () => b }), now: T }); };
+  await from({ closing: c });
+  assert.equal(s.closing.sent, false);
+  s.closing.sent = true;
+  await from({ closing: { ...c, spent: 950 } });
+  assert.equal(s.closing.sent, true, "same period → not queued again");
+  await from({ closing: { ...c, id: "2026-12" } });
+  assert.deepEqual([s.closing.id, s.closing.sent], ["2026-12", false]);
+});

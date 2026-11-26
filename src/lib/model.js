@@ -109,6 +109,14 @@ export function holdings(snapshot, rules, entity) {
   return { total: banks.reduce((a, b) => a + b.total, 0), banks };
 }
 
+// A card's usual bill: the median of its last 6 closed bills (null with fewer than 3). Used to estimate the bills ahead,
+// of which only the installments are posted yet.
+export function typicalBill(bills, today) {
+  const t = (bills || []).filter((b) => b.dueDate.slice(0, 10) < today && b.totalAmount > 0).sort((x, y) => y.dueDate.localeCompare(x.dueDate)).slice(0, 6).map((b) => b.totalAmount).sort((a, b) => a - b);
+  if (t.length < 3) return null;
+  return t.length % 2 ? t[(t.length - 1) / 2] : (t[t.length / 2 - 1] + t[t.length / 2]) / 2;
+}
+
 export function cards(snapshot, rules, entity, today) {
   const out = [];
   for (const it of snapshot.items) {
@@ -117,7 +125,7 @@ export function cards(snapshot, rules, entity, today) {
       if (a.type !== "CREDIT") continue;
       const next = (a.bills || []).filter((b) => b.dueDate.slice(0, 10) >= today).sort((x, y) => x.dueDate.localeCompare(y.dueDate))[0];
       const due = nextDue(a.credit?.balanceDueDate, today) || next?.dueDate.slice(0, 10) || null;
-      out.push({ bank: it.label, name: bankName(it.label), used: a.balance || 0, limit: a.credit?.creditLimit || null, due, ...openBill(a, due) });
+      out.push({ bank: it.label, name: bankName(it.label), used: a.balance || 0, limit: a.credit?.creditLimit || null, due, typical: typicalBill(a.bills, today), ...openBill(a, due) });
     }
   }
   return out.sort((a, b) => b.bill - a.bill);

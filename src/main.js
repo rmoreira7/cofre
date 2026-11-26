@@ -3,7 +3,8 @@ import { createBio } from "./lib/bio.js";
 import { createPluggy } from "./lib/pluggy.js";
 import { DEFAULT_TARGET } from "./lib/spend.js";
 import { slim, holdings, primaryEntity, bankName, shouldAutoRefresh } from "./lib/model.js";
-import { localToday } from "./lib/format.js";
+import { localToday, daysBetween } from "./lib/format.js";
+import { CLOSING_DAYS } from "./lib/closing.js";
 import { logPositions } from "./lib/income.js";
 import { keepYearEnd } from "./lib/yearend.js";
 import { buildView } from "./lib/view.js";
@@ -16,7 +17,7 @@ import * as investments from "./screens/investments/index.js";
 import * as projection from "./screens/projection/index.js";
 import * as settings from "./screens/settings/index.js";
 
-export const APP_VERSION = "0.27.0";
+export const APP_VERSION = "0.28.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, investments, projection, settings };
 
@@ -96,6 +97,10 @@ function syncDecisions({ force = false } = {}) {
       });
       // The contas do mês and renewals edited on the phone travel with the decisions (Ajustes › Contas).
       const lists = state.data.lists ? { lists: state.data.lists } : {};
+      // The month-end summary, for the watcher to send to Telegram once (it has no categorization rules of its own).
+      let closing = null;
+      try { const v = ctx.view(); if (v.closing && daysBetween(v.closing.end, localToday()) <= CLOSING_DAYS) closing = v.closing; } catch { closing = null; }
+      if (closing) lists.closing = closing;
       const h = canon({ ...m, ...lists });
       if (cfg.gist && cfg.token && h !== state.data.syncPushed) {
         await pushPhone({ gist: cfg.gist, token: cfg.token, key: cfg.key, value: { v: 1, ...m, ...lists } });

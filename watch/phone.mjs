@@ -32,5 +32,8 @@ export async function pullPhone(state, { gist, key, owner = process.env.GITHUB_R
   // The phone's own contas do mês and renewals (Ajustes › Contas), kept so a run that cannot read the gist still has them.
   const l = phone.lists;
   if (l && validMonthly(l.monthly || []) && validRenewals(l.renewals || []) && !((state.lists?.ts || 0) > (l.ts || 0))) state.lists = l;
+  // The month-end summary the phone built (src/lib/closing.js): sent once per period by run.mjs.
+  const c = phone.closing;
+  if (c && /^\d{4}-\d{2}$/.test(c.id) && Number.isFinite(c.spent) && c.id !== state.closing?.id) state.closing = { ...c, sent: false };
   return String(changed);
 }

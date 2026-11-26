@@ -30,7 +30,7 @@ export function render(t) {
     </div></div>
     ${months.length ? months.map((g) => `<div class="card"><div class="label">${esc(head(g.m))}</div><div class="tl mt6">${g.rows.map((e) => agendaRow(e, { balance: true })).join("")}</div></div>`).join("")
       : '<div class="card empty"><b>Nada neste período</b>Nenhuma conta, vencimento ou renovação.</div>'}
-    <div class="muted xs">"~" = valor de referência ou só as parcelas já lançadas; o valor certo aparece quando a cobrança entra. Contas do mês e renovações: Ajustes › Contas.</div>`;
+    <div class="muted xs">"~" = valor de referência; faturas futuras: a média das últimas 6, ou as parcelas já lançadas se forem mais; o valor certo aparece quando a cobrança entra. Contas do mês e renovações: Ajustes › Contas.</div>`;
 }
 
 // The checking account over the period: today, the lowest point, and what to bring from the reserve if it goes below 0.
@@ -42,7 +42,7 @@ function cashCard(v, list) {
   return `<div class="card${short ? " alert-card" : ""}"><div class="row"><div class="label">Saldo previsto na conta</div><span class="muted sm">hoje ${brl(c.checking)}</span></div>
     ${low ? `<div class="hero-row mt6"><span class="kpi${short ? " bad" : ""}">${brl(low.balance)}</span><span class="muted">no ponto mais baixo, ${ddmm(low.date)}</span></div>` : '<div class="muted sm mt6">Nada sai da conta neste período.</div>'}
     <div class="muted sm">${short ? `Faltam <b>${brl(short)}</b>: resgate da reserva (${brl(c.free)} livre, liquidez diária) antes de ${ddmm(low.date)}.` : `Conta mais a reserva livre: ${brl(c.checking + c.free)}.`}</div>${kept}
-    <div class="muted xs mt6">Contas correntes suas (sem a conjunta), menos faturas e contas a pagar, mais o salário previsto${c.earmark ? "; a fatura Nubank sai da reserva" : ""}. Faturas futuras só com as parcelas já lançadas.</div></div>`;
+    <div class="muted xs mt6">Contas correntes suas (sem a conjunta), menos faturas e contas a pagar, mais o salário previsto${c.earmark ? "; a fatura Nubank sai da reserva" : ""}. Faturas futuras pela média das últimas 6.</div></div>`;
 }
 
 export function bind(pane, t, ctx, { repaint }) {

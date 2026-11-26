@@ -1,14 +1,14 @@
 // Caches the app shell only. API calls (api.pluggy.ai) are never cached here:
 // the data lives encrypted in IndexedDB, not in the HTTP cache.
-const CACHE = "cofre-0.27.0";
+const CACHE = "cofre-0.28.0";
 const SHELL = [
   "./", "index.html", "oauth.html", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png",
   "icons/icon-512.png", "src/app.css", "src/tokens.css", "src/lib/agenda.js", "src/lib/bio.js",
-  "src/lib/cardtx.js", "src/lib/categorize.js", "src/lib/cdblca.js", "src/lib/decisions.js", "src/lib/format.js",
-  "src/lib/gauth.js", "src/lib/gcal.js", "src/lib/ics.js", "src/lib/income.js", "src/lib/ladder.js",
-  "src/lib/lists.js", "src/lib/model.js", "src/lib/pluggy.js", "src/lib/projection.js", "src/lib/remote.js",
-  "src/lib/seal.js", "src/lib/spend.js", "src/lib/sync.js", "src/lib/vault.js", "src/lib/view.js",
-  "src/lib/yearend.js", "src/main.js", "src/oauth.js", "src/screens/home/agenda.js",
+  "src/lib/cardtx.js", "src/lib/categorize.js", "src/lib/cdblca.js", "src/lib/closing.js", "src/lib/decisions.js",
+  "src/lib/format.js", "src/lib/gauth.js", "src/lib/gcal.js", "src/lib/ics.js", "src/lib/income.js",
+  "src/lib/ladder.js", "src/lib/lists.js", "src/lib/model.js", "src/lib/pluggy.js", "src/lib/projection.js",
+  "src/lib/remote.js", "src/lib/seal.js", "src/lib/spend.js", "src/lib/sync.js", "src/lib/vault.js",
+  "src/lib/view.js", "src/lib/yearend.js", "src/main.js", "src/oauth.js", "src/screens/home/agenda.js",
   "src/screens/home/decisions.js", "src/screens/home/index.js", "src/screens/home/summary.js",
   "src/screens/investments/income.js", "src/screens/investments/index.js", "src/screens/investments/maturities.js",
   "src/screens/investments/rules.js", "src/screens/investments/wallet.js", "src/screens/projection/assumptions.js",

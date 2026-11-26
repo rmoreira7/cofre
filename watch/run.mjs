@@ -16,6 +16,7 @@ import { createTelegram } from "./telegram.mjs";
 import { load, save, EMPTY } from "./state.mjs";
 import { applyTaps, syncMessages, buttons, pruneMessages, sig } from "./taps.mjs";
 import { pullPhone } from "./phone.mjs";
+import { closingText } from "../src/lib/closing.js";
 
 const need = (k) => process.env[k] || (console.error(`missing ${k}`), process.exit(2));
 const dry = process.env.DRY_RUN === "1";
@@ -125,8 +126,10 @@ if (tokens) console.log(`openai tokens: ${tokens}`);
 console.log(`decisions: ${d.urgent.length} due, ${reports.length} reports, ${d.weekly.length} weekly, digest=${d.monday}`);
 
 const week = digest(d, today);
+// The month-end summary from the phone, once per period (state.closing.sent).
+const close = state.closing && !state.closing.sent ? closingText(state.closing) : null;
 if (dry) {
-  for (const t of [...reports, ...d.urgent.map(decisionText), ...(week ? [week] : [])]) console.log("\n" + t);
+  for (const t of [...reports, ...d.urgent.map(decisionText), ...(week ? [week] : []), ...(close ? [close] : [])]) console.log("\n" + t);
 } else {
   for (const t of reports) await tg.send(t);
   for (const u of d.urgent) {
@@ -136,6 +139,7 @@ if (dry) {
     if (withState) state.messages[n] = { id: u.id, d: u.d, text, at: today, mid: m.message_id, seen: sig(state, u.id) };
   }
   if (week) await tg.send(week);
+  if (close) { await tg.send(close); state.closing.sent = true; }
   console.log("sent");
 }
 if (withState && !dry) { pruneMessages(state, today); await save(statePath, state, stateKey); }

@@ -3,13 +3,15 @@ import { brl, mil, ddmm, esc, MES } from "../../lib/format.js";
 import { GO } from "../../ui/shell.js";
 import { agendaRow } from "../../ui/agenda.js";
 import { agendaTotals } from "../../lib/agenda.js";
+import { CLOSING_DAYS } from "../../lib/closing.js";
+import { daysBetween } from "../../lib/format.js";
 
 export const id = "summary";
 export const label = "Resumo";
 
 export function render(t) {
   const { v, board } = t;
-  return `${cycleSummary(v)}
+  return `${closingCard(v)}${cycleSummary(v)}
     ${decisionsSummary(board.open)}
     ${timelineCard(v.timeline)}
     ${wealthSummary(v)}
@@ -28,6 +30,26 @@ function decisionsSummary(open) {
       <div class="row"><div class="dlist grow">${shown.map((d) => `<div><span><b>${when(d)}</b> ${esc(d.title)}${d.joint ? " <small>conjunta</small>" : ""}</span><span class="nw${d.kind === "idle" ? " warn" : ""}">${d.kind === "idle" && d.cost ? `~${money(d.cost)}/dia útil` : d.amount != null ? brl(d.amount) : ""}</span></div>`).join("")}</div>${GO}</div>
       ${open.length > shown.length ? `<div class="muted sm">+ ${open.length - shown.length} outras</div>` : ""}
       <div class="to">Início › Decisões</div>
+    </button>`;
+}
+
+// The period that just closed, for CLOSING_DAYS after it: spent against the target, groups over their limit, what came
+// in and what the investments earned. The same summary goes to Telegram once.
+function closingCard(v) {
+  const c = v.closing;
+  if (!c || daysBetween(c.end, v.today) > CLOSING_DAYS) return "";
+  const p = c.target ? Math.min(100, (c.spent / c.target) * 100) : 0;
+  return `<button class="card tap-card sum-card" data-go="spend:history">
+      <div class="row"><div class="label">Fechamento · ${c.cycle ? `${ddmm(c.start)} → ${ddmm(c.end)}` : `${MES[Number(c.id.slice(5)) - 1]}/${c.id.slice(2, 4)}`}</div><span class="chip${c.over ? " bad" : " ok"}">${c.over ? `${brl(c.spent - c.target)} acima` : `sobrou ${brl(c.target - c.spent)}`}</span></div>
+      <div class="row mt6"><div class="hero-row"><span class="kpi">${brl(c.spent)}</span><span class="muted">de ${brl(c.target)}</span></div>${GO}</div>
+      <div class="track goal-track mt8"><div class="fill" style="width:${p}%;background:var(${c.over ? "--bad" : "--ok"})"></div></div>
+      <div class="dlist mt8">
+        ${c.overGroups.length ? `<div><span>Acima do limite</span><span class="bad">${c.overGroups.map((g) => `${esc(g.label)} +${brl(g.over)}`).join(" · ")}</span></div>` : ""}
+        ${c.income ? `<div><span>Entrou</span><span>${brl(c.income)} · ${c.left >= 0 ? "sobrou" : "faltou"} ${brl(Math.abs(c.left))}</span></div>` : ""}
+        ${c.earned != null ? `<div><span>Investimentos renderam</span><span class="ok">${brl(c.earned)}</span></div>` : ""}
+        ${c.committed?.amount > 0 ? `<div><span>Próxima fatura já tem</span><span>${brl(c.committed.amount)} em parcelas</span></div>` : ""}
+      </div>
+      <div class="to">Gastos › Histórico</div>
     </button>`;
 }
 

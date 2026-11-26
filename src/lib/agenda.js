@@ -1,26 +1,29 @@
 // The agenda: everything dated ahead, in one list. Card bills (the open one, and the months ahead with the installments
 // already posted), the monthly bills paid by hand (with ✓ once the charge shows), renewals, maturities and the forecast
 // salary. Pure; Início shows the next 30 days of it and Início › Agenda up to 90.
-import { timeline, bankName } from "./model.js";
+import { timeline } from "./model.js";
 import { nextMonthly, monthlyPayment, upcomingRenewals } from "./decisions.js";
 import { daysBetween } from "./format.js";
 
+const addMonths = (ym, n) => { const [y, m] = ym.split("-").map(Number); const d = new Date(Date.UTC(y, m - 1 + n, 1)); return d.toISOString().slice(0, 7); };
 const dueIn = (ym, day) => { const [y, m] = ym.split("-").map(Number); return `${ym}-${String(Math.min(day, new Date(Date.UTC(y, m, 0)).getUTCDate())).padStart(2, "0")}`; };
 
 export function agenda({ cards = [], bills = [], mat, salary = [], monthly = [], renewals = [], snapshot = null, cash = null, today, days = 90 }) {
   const fromReserve = (bank) => Boolean(cash?.earmark && cash.billBank === bank);
   const out = timeline({ cards, mat, salary, today, days }).map((e) => ({ ...e, pay: e.kind === "bill", ...(e.kind === "bill" && fromReserve(e.bank) && { reserve: true }) }));
   const inWindow = (d) => daysBetween(today, d) >= 0 && daysBetween(today, d) <= days;
-  // Bills after the open one: only what is already posted (installments), on the card's usual due day.
-  for (const m of bills) {
-    if (m.open) continue;
-    const per = new Map();
-    for (const r of m.rows) per.set(r.bank, (per.get(r.bank) || 0) + r.amount);
-    for (const [bank, amount] of per) {
-      const c = cards.find((x) => x.bank === bank && x.due);
-      if (!c || !(amount > 0)) continue;
-      const date = dueIn(m.month, Number(c.due.slice(8, 10)));
-      if (inWindow(date)) out.push({ date, kind: "bill", bank, name: `Fatura ${bankName(bank)}`, amount: -amount, pay: true, partial: true, ...(fromReserve(bank) && { reserve: true }) });
+  // Bills after the open one, on the card's due day: the installments already posted, or the card's usual bill (median
+  // of its last 6) when that is more, since new purchases have not happened yet.
+  for (const c of cards) {
+    if (!c.due) continue;
+    for (let k = 1; k <= 3; k++) {
+      const month = addMonths(c.due.slice(0, 7), k), date = dueIn(month, Number(c.due.slice(8, 10)));
+      if (!inWindow(date)) continue;
+      const posted = (bills.find((m) => m.month === month && !m.open)?.rows || []).filter((r) => r.bank === c.bank).reduce((a, r) => a + r.amount, 0);
+      const est = c.typical > posted;
+      const amount = est ? c.typical : posted;
+      if (!(amount > 0)) continue;
+      out.push({ date, kind: "bill", bank: c.bank, name: `Fatura ${c.name}`, amount: -amount, pay: true, partial: !est, est, posted, ...(fromReserve(c.bank) && { reserve: true }) });
     }
   }
   for (const m of nextMonthly(monthly, today, snapshot)) {
