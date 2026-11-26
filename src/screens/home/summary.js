@@ -70,7 +70,7 @@ function billsSummary(v) {
 const SHOWN = 7;
 function timelineCard(list) {
   if (!list?.length) return "";
-  const pay = agendaTotals(list).out;
+  const pay = agendaTotals(list).pay;
   return `<button class="card tap-card sum-card" data-go="home:agenda">
     <div class="row"><div class="label">Próximos 30 dias</div><span class="muted sm">${pay ? `a pagar ${brl(pay)}` : "entra · sai · vence"}</span></div>
     <div class="row"><div class="tl mt6 grow">${list.slice(0, SHOWN).map(agendaRow).join("")}</div>${GO}</div>

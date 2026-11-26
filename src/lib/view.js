@@ -51,7 +51,7 @@ export function buildView(data, today) {
   v.bills = billMonths(snap, rules, me, today);
   v.history = monthlyHistory(mergeLog(rules?.invHistory, data.invLog), Object.fromEntries(v.income.banks.map((b) => [b.label, b.net])));
   v.alerts = alerts(v, { idleCash: s.idleCash ?? 5000, cdbMin: s.cdbMin ?? 110 });
-  v.cash = cashOf(mine);
+  v.cash = cashOf(mine, { earmark: s.billReserve || 0 });
   v.agenda = agenda({ cards: v.cards, bills: v.bills, mat: v.mat, salary: salaryForecast(income, { today, days: 90 }), monthly: lists.monthly, renewals: lists.renewals, snapshot: snap, cash: v.cash, today, days: 90 });
   v.timeline = v.agenda.filter((e) => e.late || daysBetween(today, e.date) <= 30);
   return v;

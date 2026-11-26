@@ -8,7 +8,8 @@ import { daysBetween } from "./format.js";
 const dueIn = (ym, day) => { const [y, m] = ym.split("-").map(Number); return `${ym}-${String(Math.min(day, new Date(Date.UTC(y, m, 0)).getUTCDate())).padStart(2, "0")}`; };
 
 export function agenda({ cards = [], bills = [], mat, salary = [], monthly = [], renewals = [], snapshot = null, cash = null, today, days = 90 }) {
-  const out = timeline({ cards, mat, salary, today, days }).map((e) => ({ ...e, pay: e.kind === "bill" }));
+  const fromReserve = (bank) => Boolean(cash?.earmark && cash.billBank === bank);
+  const out = timeline({ cards, mat, salary, today, days }).map((e) => ({ ...e, pay: e.kind === "bill", ...(e.kind === "bill" && fromReserve(e.bank) && { reserve: true }) }));
   const inWindow = (d) => daysBetween(today, d) >= 0 && daysBetween(today, d) <= days;
   // Bills after the open one: only what is already posted (installments), on the card's usual due day.
   for (const m of bills) {
@@ -19,7 +20,7 @@ export function agenda({ cards = [], bills = [], mat, salary = [], monthly = [],
       const c = cards.find((x) => x.bank === bank && x.due);
       if (!c || !(amount > 0)) continue;
       const date = dueIn(m.month, Number(c.due.slice(8, 10)));
-      if (inWindow(date)) out.push({ date, kind: "bill", name: `Fatura ${bankName(bank)}`, amount: -amount, pay: true, partial: true });
+      if (inWindow(date)) out.push({ date, kind: "bill", bank, name: `Fatura ${bankName(bank)}`, amount: -amount, pay: true, partial: true, ...(fromReserve(bank) && { reserve: true }) });
     }
   }
   for (const m of nextMonthly(monthly, today, snapshot)) {
@@ -32,9 +33,11 @@ export function agenda({ cards = [], bills = [], mat, salary = [], monthly = [],
   out.sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind));
   // The checking balance after each line that moves it: unpaid bills and contas paid from the account go out, the
   // forecast salary comes in. A conta on the card moves nothing here (it leaves with that card's bill).
+  // A card bill paid from the money set apart for it (Ajustes › Metas) draws on that instead, and says when it is short.
   if (cash) {
-    let bal = cash.checking;
+    let bal = cash.checking, kept = cash.earmark || 0;
     for (const e of out) {
+      if (e.reserve && !e.paid) { kept += e.amount || 0; e.kept = kept; continue; }
       const d = moves(e);
       if (!d) continue;
       bal += d;
@@ -44,15 +47,19 @@ export function agenda({ cards = [], bills = [], mat, salary = [], monthly = [],
   return out;
 }
 
-const moves = (e) => (e.kind === "salary" ? e.amount : e.pay && !e.paid && !e.card ? e.amount || 0 : 0);
+const moves = (e) => (e.kind === "salary" ? e.amount : e.pay && !e.paid && !e.card && !e.reserve ? e.amount || 0 : 0);
 
-// The owner's money: checking (what bills are paid from) and the daily-liquidity reserve beside it.
-export function cashOf(mine) {
+// Banks whose own investments are the daily-liquidity reserve (Nubank's caixinhas come through as CDBs, unnamed).
+export const RESERVE_BANKS = ["nubank"];
+
+// The owner's money: checking (what bills are paid from) and the daily-liquidity reserve beside it, of which
+// `earmark` (Ajustes › Metas) is set apart to pay that bank's card bill; `free` is the rest.
+export function cashOf(mine, { earmark = 0 } = {}) {
   const banks = (mine?.banks || []).filter((b) => !b.joint);
-  return {
-    checking: banks.reduce((a, b) => a + (b.checking || 0), 0),
-    reserve: banks.reduce((a, b) => a + (b.reserved || []).reduce((x, p) => x + (p.balance || 0), 0), 0),
-  };
+  const res = banks.filter((b) => RESERVE_BANKS.includes(b.label));
+  const reserve = res.reduce((a, b) => a + (b.invested || 0), 0) + banks.filter((b) => !RESERVE_BANKS.includes(b.label)).reduce((a, b) => a + (b.reserved || []).reduce((x, p) => x + (p.balance || 0), 0), 0);
+  const kept = Math.min(Math.max(0, earmark || 0), res.reduce((a, b) => a + (b.invested || 0), 0));
+  return { checking: banks.reduce((a, b) => a + (b.checking || 0), 0), reserve, earmark: kept, free: reserve - kept, billBank: kept ? RESERVE_BANKS[0] : null };
 }
 
 // The lowest the account gets over the list, and on which day (null when it never moves).
@@ -62,13 +69,20 @@ export function lowPoint(list) {
   return low;
 }
 
+// The first bill the set-apart money does not cover: { date, short } or null.
+export function keptShort(list) {
+  const e = list.find((x) => x.kept != null && x.kept < 0);
+  return e ? { date: e.date, short: -e.kept, name: e.name } : null;
+}
+
 // What goes out and comes in over the list (unpaid, from the account; a conta on the card is in its bill already;
 // maturities are money already yours, not income).
+// out: from the account · reserve: from the money set apart for the card · pay: both (what there is to pay).
 export function agendaTotals(list) {
-  let out = 0, inn = 0;
+  let out = 0, inn = 0, reserve = 0;
   for (const e of list) {
-    if (e.pay && !e.paid && !e.card) out += -(e.amount || 0);
+    if (e.pay && !e.paid && !e.card) { if (e.reserve) reserve += -(e.amount || 0); else out += -(e.amount || 0); }
     if (e.kind === "salary") inn += e.amount;
   }
-  return { out, in: inn };
+  return { out, in: inn, reserve, pay: out + reserve };
 }

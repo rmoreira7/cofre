@@ -20,7 +20,7 @@ export function render(t) {
   return `    <div class="row mb10"><div class="sub">${esc(sub)}</div><span class="row"><button class="lnk" data-a="gcal">${CAL_ICON} Google Agenda</button><button class="lnk muted" data-a="ics">.ics</button></span></div>
     <div class="muted sm mb10" data-gstat role="status"></div>
     <div class="card muted sm" data-icshint hidden>${ICS_HINT}</div>
-    ${lad.total ? ladderCard(lad, reserve) + planCard(lad) + aheadCard(lad) : ""}
+    ${lad.total ? ladderCard(lad, reserve, t.kept) + planCard(lad) + aheadCard(lad) : ""}
     <div class="seg">${[["90", "90 dias"], ["365", "12 meses"], ["all", "Todos"]].map(([f, l]) => `<button data-f="${f}" class="${f === filter ? "on" : ""}">${l}</button>`).join("")}</div>
     <div class="card" data-list></div>
 `;
@@ -82,17 +82,17 @@ const pc = (x) => pct(x * 100, 1);
 const toneOf = (share, t) => (Math.abs(share - t) <= 0.03 ? "on" : share > t ? "over" : "under");
 
 // 1 · the ladder today: one bar per rung against the equal share; the daily-liquidity reserve shown apart.
-function ladderCard(l, reserve) {
+function ladderCard(l, reserve, kept = 0) {
   const t = 1 / l.now.length, scale = Math.max(t, ...l.now.map((r) => r.share)) * 1.08;
   return `<div class="card">
     <div class="row"><div class="label">Escada de vencimentos</div><span class="muted sm">meta ${pc(t)} cada</span></div>
-    ${reserve ? `<div class="rung reserve"><span class="k">0–3m</span><div class="rb"></div><span class="v"><b>${brl(reserve)}</b><span class="muted">Nubank · reserva</span></span></div>` : ""}
+    ${reserve ? `<div class="rung reserve"><span class="k">0–3m</span><div class="rb"></div><span class="v"><b>${brl(reserve)}</b><span class="muted">Nubank · reserva${kept ? " livre" : ""}</span></span></div>` : ""}
     ${l.now.map((r) => {
       const tone = toneOf(r.share, t);
       return `<div class="rung"><span class="k">${r.label}</span><div class="rb"><i class="${tone}" style="width:${(r.share / scale) * 100}%"></i><span class="tg" style="left:${(t / scale) * 100}%"></span></div>
         <span class="v"><b>${pc(r.share)}</b><span class="${tone}">${tone === "on" ? "na meta" : `${r.gap > 0 ? "+" : "−"}${brl(Math.abs(r.gap)).replace("R$ ", "")}`}</span></span></div>`;
     }).join("")}
-    <div class="muted sm mt6">Azul: falta · laranja: sobra · traço: meta. A reserva diária fica fora do %.</div>
+    <div class="muted sm mt6">Azul: falta · laranja: sobra · traço: meta. A reserva diária fica fora do %.${kept ? ` Fora dela, ${brl(kept)} separados para a fatura Nubank.` : ""}</div>
   </div>`;
 }
 

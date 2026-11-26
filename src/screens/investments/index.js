@@ -2,13 +2,12 @@
 // (a few hundred ms) computed once per data change and the daily-liquidity reserve the ladder stands on.
 import { tabbedScreen } from "../../ui/tabbed.js";
 import { ladder } from "../../lib/ladder.js";
+import { RESERVE_BANKS } from "../../lib/agenda.js";
 import * as wallet from "./wallet.js";
 import * as income from "./income.js";
 import * as maturities from "./maturities.js";
 import * as rules from "./rules.js";
 
-// Banks whose own daily-liquidity product is the 0–3 month reserve (outside the ladder's shares).
-const RESERVE_BANKS = ["nubank"];
 
 export const screen = {
   tab: "investments",
@@ -17,8 +16,10 @@ export const screen = {
   context(ctx) {
     const v = ctx.view();
     v.ladder ||= ladder(v.mat.rows, { today: v.today });
-    const reserve = v.wealth.banks.filter((b) => RESERVE_BANKS.includes(b.label)).reduce((a, b) => a + b.invested, 0);
-    return { ...v, lad: v.ladder, reserve };
+    // The part set apart for the card bill (Ajustes › Metas) is not liquidity for anything else.
+    const kept = v.cash?.earmark || 0;
+    const reserve = v.wealth.banks.filter((b) => RESERVE_BANKS.includes(b.label)).reduce((a, b) => a + b.invested, 0) - kept;
+    return { ...v, lad: v.ladder, reserve, kept };
   },
 };
 

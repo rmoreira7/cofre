@@ -1,5 +1,5 @@
 // Ajustes › Metas: the spending target and month mode, each group's limit, and the investment parameters (CDI,
-// CDB floor, idle-cash alert). Every field saves when it loses focus.
+// CDB floor, idle-cash alert, the part of the Nubank reserve set apart for the card bill). Every field saves when it loses focus.
 import { CLUSTERS, DEFAULT_TARGET, limitsFor } from "../../lib/spend.js";
 import { brl, esc } from "../../lib/format.js";
 import { saveSettings } from "./common.js";
@@ -26,6 +26,7 @@ export function bind(pane, t, ctx, { repaint }) {
     if (f.name === "cdi") return save({ cdi: Number(f.value) || 13.65 }, "inv");
     if (f.name === "cdbMin") return save({ cdbMin: Number(f.value) || 110 }, "inv");
     if (f.name === "idleCash") return save({ idleCash: Math.max(0, Number(f.value) || 0) }, "inv");
+    if (f.name === "billReserve") return save({ billReserve: Math.max(0, Number(f.value) || 0) }, "inv");
   };
   pane.onclick = async (e) => {
     const b = e.target.closest("button");
@@ -65,6 +66,7 @@ function investCard(s) {
     ${f("cdi", "CDI", "usado na Projeção e na comparação CDB × LCA", s.cdi ?? 13.65, "0.05", "% a.a.")}
     ${f("cdbMin", "CDB mínimo", "abaixo disso, o vencimento pede outro título", s.cdbMin ?? 110, "1", "% CDI")}
     ${f("idleCash", "Dinheiro parado", "alerta acima deste saldo em conta", s.idleCash ?? 5000, "500", "R$")}
+    ${f("billReserve", "Reserva da fatura Nubank", "parte dos CDBs Nubank que paga o cartão; 0 = nenhuma", s.billReserve ?? 0, "500", "R$")}
     <div class="row"><span></span><span class="muted sm" data-saved="inv">salva ao sair do campo</span></div>
   </div>`;
 }

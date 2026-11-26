@@ -170,6 +170,7 @@ export function leftover(income, spend, months, key = "m") {
 // Salary still to come in the next `days`: each pay slot (paid up to the 15th / after the 15th) seen in ≥ 3 of the
 // last 6 months gives its median day and the median of its last 3 amounts. A month that already got that slot's
 // payment is skipped. Output rows are forecasts, not data.
+const toFriday = (iso) => { const w = new Date(iso + "T12:00:00Z").getUTCDay(); return w === 6 ? addDays(iso, -1) : w === 0 ? addDays(iso, -2) : iso; };
 export function salaryForecast(income, { today, days = 30 }) {
   const sal = income.filter((r) => r.kind === "salary" && r.d <= today && r.d >= addDays(today, -183)).sort((a, b) => a.d.localeCompare(b.d));
   const slotOf = (d) => (Number(d.slice(8, 10)) <= 15 ? 0 : 1);
@@ -183,7 +184,8 @@ export function salaryForecast(income, { today, days = 30 }) {
     const from = rows.at(-1).from;
     for (const m of [today.slice(0, 7), addMonths(today.slice(0, 7), 1), addMonths(today.slice(0, 7), 2)]) {
       const [y, mo] = m.split("-").map(Number);
-      const date = `${m}-${String(Math.min(day, new Date(Date.UTC(y, mo, 0)).getUTCDate())).padStart(2, "0")}`;
+      // Paid on the business day before when the day falls on a weekend: Saturday or Sunday → Friday.
+      const date = toFriday(`${m}-${String(Math.min(day, new Date(Date.UTC(y, mo, 0)).getUTCDate())).padStart(2, "0")}`);
       if (date < today || date > end || income.some((r) => r.kind === "salary" && r.m === m && slotOf(r.d) === slot)) continue;
       out.push({ date, amount, from });
     }

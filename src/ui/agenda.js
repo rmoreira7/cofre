@@ -9,7 +9,7 @@ export function agendaRow(e, { balance = false } = {}) {
   const tag = e.paid ? ` <span class="chip ok chip-s">paga ${ddmm(e.paid)}</span>` : e.late ? ' <span class="chip bad chip-s">atrasada</span>' : "";
   const text = e.kind === "salary" ? `Salário <small>previsto</small>`
     : e.kind === "maturity" ? `${esc(e.name)}${e.joint ? " <small>conjunta</small>" : ""}${earnLine(e.earn)}`
-    : e.kind === "bill" ? `${esc(e.name)}${e.partial ? " <small>parcelas já lançadas</small>" : ""}`
+    : e.kind === "bill" ? `${esc(e.name)}${e.partial ? " <small>parcelas já lançadas</small>" : ""}${e.reserve ? `<small${e.kept < 0 ? ' class="bad"' : ""}>sai da reserva da fatura${e.kept < 0 ? ` · faltam ${brl(-e.kept)}` : ""}</small>` : ""}`
     : e.kind === "renewal" ? `${esc(e.name)}${e.note ? `<small>${esc(e.note)}</small>` : ""}`
     : `${esc(e.name)}${tag}${e.card ? "<small>no cartão: entra na fatura</small>" : ""}`;
   const amt = e.amount == null ? "" : e.kind === "salary" ? `+ ~${brl(e.amount)}` : e.kind === "maturity" ? brl(e.amount)

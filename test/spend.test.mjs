@@ -135,7 +135,7 @@ test("income: salary = same-person transfer from an unconnected bank; leftover p
   assert.deepEqual(m, { month: "2026-11", salary: 7000, other: 122, oneOff: 0, income: 7122, spent: 5000, left: 2122, regular: 2122 });
 });
 
-test("salaryForecast: median day and amount per pay slot, skipping months already paid", async () => {
+test("salaryForecast: median day and amount per pay slot, a weekend moved to the Friday, skipping months already paid", async () => {
   const { salaryForecast } = await import("../src/lib/spend.js");
   const s = (d, amt) => ({ d, m: d.slice(0, 7), amt, kind: "salary", from: "237" });
   const income = [
@@ -144,9 +144,10 @@ test("salaryForecast: median day and amount per pay slot, skipping months alread
     { d: "2026-11-10", m: "2026-11", amt: 50, kind: "other" },
   ];
   assert.deepEqual(salaryForecast(income, { today: "2026-11-23" }), [
-    { date: "2026-12-05", amount: 7277, from: "237" },
-    { date: "2026-12-20", amount: 4723, from: "237" },
+    { date: "2026-12-04", amount: 7277, from: "237" }, // 05/12 is a Saturday → Friday
+    { date: "2026-12-18", amount: 4723, from: "237" }, // 20/12 is a Sunday → Friday
   ]);
+  assert.deepEqual(salaryForecast(income, { today: "2026-12-21", days: 31 }).map((x) => x.date), ["2027-01-05", "2027-01-20"], "weekdays stay");
   assert.deepEqual(salaryForecast(income.slice(0, 2), { today: "2026-11-23" }), []);
 });
 
