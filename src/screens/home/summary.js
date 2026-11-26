@@ -1,7 +1,7 @@
 // Início › Resumo: five short rows, each opening the sub-tab where it is dealt with; open decisions first.
 import { brl, mil, ddmm, esc, MES } from "../../lib/format.js";
 import { GO } from "../../ui/shell.js";
-import { earnLine } from "../../ui/earn.js";
+import { agendaRow } from "../../ui/agenda.js";
 
 export const id = "summary";
 export const label = "Resumo";
@@ -60,24 +60,18 @@ function billsSummary(v) {
       <div class="row"><div class="label">Faturas</div>${GO}</div>
       <div class="muted">${live.map((c) => `${esc(c.name)} <b class="ink">${brl(c.bill)}</b>${c.due ? ` ${ddmm(c.due)}` : ""}`).join(" · ")}</div>
       ${ahead > 0 ? `<div class="muted sm">${brl(ahead)} já parcelado nas próximas</div>` : ""}
-      <div class="to">Gastos › Faturas</div>
+      <div class="to">Gastos › Fatura · Parcelas</div>
     </button>`;
 }
 
 
-// 3 · the next 30 days: what goes out, what comes in, what matures.
+// 3 · the next 30 days, the first lines; the whole list (30 or 90 days) is Início › Agenda.
+const SHOWN = 7;
 function timelineCard(list) {
   if (!list?.length) return "";
-  const row = (e) => {
-    const [, mo, d] = e.date.split("-");
-    const dot = e.kind === "bill" ? "--c-bills" : e.kind === "salary" ? "--ok" : "--c-travel";
-    // One line per event; the details live in Faturas and Vencimentos.
-    const text = e.kind === "bill" ? esc(e.name)
-      : e.kind === "salary" ? `Salário <small>previsto</small>`
-      : `${esc(e.name)}${e.joint ? " <small>conjunta</small>" : ""}${earnLine(e.earn)}`;
-    const amt = e.kind === "bill" ? `− ${brl(-e.amount)}` : e.kind === "salary" ? `+ ~${brl(e.amount)}` : brl(e.amount);
-    return `<div class="${e.forecast ? "fore" : ""}"><span class="d"><b>${d}</b>${MES[Number(mo) - 1]}</span><i class="dot" style="background:var(${dot})"></i><span class="t">${text}</span><b class="${e.kind === "salary" ? "ok" : ""}">${amt}</b></div>`;
-  };
-  return `<div class="card"><div class="row"><div class="label">Próximos 30 dias</div><span class="muted sm">entra · sai · vence</span></div>
-    <div class="tl mt6">${list.map(row).join("")}</div></div>`;
+  const pay = list.filter((e) => e.pay && !e.paid).reduce((a, e) => a - (e.amount || 0), 0);
+  return `<button class="card tap-card sum-card" data-go="home:agenda">
+    <div class="row"><div class="label">Próximos 30 dias</div><span class="muted sm">${pay ? `a pagar ${brl(pay)}` : "entra · sai · vence"}</span></div>
+    <div class="row"><div class="tl mt6 grow">${list.slice(0, SHOWN).map(agendaRow).join("")}</div>${GO}</div>
+    <div class="to">${list.length > SHOWN ? `+ ${list.length - SHOWN} · ` : ""}Início › Agenda</div></button>`;
 }

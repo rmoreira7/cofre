@@ -2,8 +2,9 @@
 // screens can be rendered against it in tests.
 import { compileRules } from "./categorize.js";
 import { spendRows, incomeRows, leftover, salaryForecast, monthView, byMonth, sum, monthRange, cardCycles, BANK_CODES, DEFAULT_TARGET, clusterTrends, suggestGoals } from "./spend.js";
-import { holdings, cards, timeline, maturities as maturityLadder, fgc, primaryEntity, alerts, installmentsAhead, billMonths } from "./model.js";
+import { holdings, cards, maturities as maturityLadder, fgc, primaryEntity, alerts, installmentsAhead, billMonths } from "./model.js";
 import { daysBetween } from "./format.js";
+import { agenda } from "./agenda.js";
 import { income as investIncome, mergeLog, monthlyHistory, maturityEarnings } from "./income.js";
 
 export function buildView(data, today) {
@@ -48,6 +49,7 @@ export function buildView(data, today) {
   v.bills = billMonths(snap, rules, me, today);
   v.history = monthlyHistory(mergeLog(rules?.invHistory, data.invLog), Object.fromEntries(v.income.banks.map((b) => [b.label, b.net])));
   v.alerts = alerts(v, { idleCash: s.idleCash ?? 5000, cdbMin: s.cdbMin ?? 110 });
-  v.timeline = timeline({ cards: v.cards, mat: v.mat, salary: salaryForecast(income, { today }), today });
+  v.agenda = agenda({ cards: v.cards, bills: v.bills, mat: v.mat, salary: salaryForecast(income, { today, days: 90 }), monthly: rules?.monthly || [], renewals: rules?.renewals || [], snapshot: snap, today, days: 90 });
+  v.timeline = v.agenda.filter((e) => e.late || daysBetween(today, e.date) <= 30);
   return v;
 }

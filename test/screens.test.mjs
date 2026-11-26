@@ -74,11 +74,36 @@ for (const s of [home, spend, investments, projection, settings]) {
   });
 }
 
-test("Faturas lists the bill months with the installment lines", () => {
-  const html = spend.subs.find((x) => x.id === "bills").render(spend.context(ctx), ctx);
-  assert.match(html, /data-bm="2026-12"/);
-  assert.match(html, /data-bm="2027-02"/);
-  assert.match(html, /<span class="pl">1\/3<\/span>/);
+test("Fatura shows the open bill only; Parcelas the months after it, with their lines", () => {
+  const t = spend.context(ctx);
+  const open = spend.subs.find((x) => x.id === "bills").render(t, ctx);
+  assert.match(open, /Fatura de dez\/26/);
+  assert.doesNotMatch(open, /data-bm=/);
+  assert.match(open, /data-go="spend:installments"/);
+  const ahead = spend.subs.find((x) => x.id === "installments").render(t, ctx);
+  assert.doesNotMatch(ahead, /data-bm="2026-12"/, "the open bill is not a future one");
+  assert.match(ahead, /data-bm="2027-01"/);
+  assert.match(ahead, /data-bm="2027-02"/);
+  assert.match(ahead, /<span class="pl">2\/3<\/span>/);
+});
+
+test("Agenda: card bills (open and installments ahead), contas do mês with paid/late, renewals; 30 or 90 days", async () => {
+  const { agenda, agendaTotals } = await import("../src/lib/agenda.js");
+  const v = ctx.view();
+  const monthly = [{ name: "Conta A", day: 10, amount: 200 }, { name: "Conta B", day: 20, amount: 70, match: ["Mercado Teste"] }];
+  const list = agenda({ ...v, cards: v.cards, bills: v.bills, mat: v.mat, monthly, renewals: [{ name: "Plano Teste", date: "2027-01-15", amount: 20 }], snapshot: data.snapshot, today, days: 90 });
+  const kinds = list.map((e) => `${e.kind}:${e.date}`);
+  assert.ok(kinds.includes("bill:2026-12-03"));
+  assert.ok(list.some((e) => e.kind === "bill" && e.partial && e.date.startsWith("2027-01")), "installments ahead, on the card's due day");
+  assert.ok(kinds.includes("monthly:2026-12-10"));
+  assert.ok(list.some((e) => e.kind === "renewal"));
+  const t = agendaTotals(list.filter((e) => e.date <= "2026-12-24"));
+  assert.ok(t.out >= 560 + 200);
+  const home = await import("../src/screens/home/index.js");
+  const html = home.screen.subs.find((x) => x.id === "agenda").render(home.screen.context(ctx), ctx);
+  assert.match(html, /A pagar/);
+  assert.match(html, /Dezembro/);
+  assert.match(home.screen.subs.find((x) => x.id === "summary").render(home.screen.context(ctx), ctx), /data-go="home:agenda"/);
 });
 
 test("Rendimentos shows the measured history with the joint account apart", () => {

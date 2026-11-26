@@ -1,31 +1,50 @@
-// Gastos › Faturas: each card's open bill, the bills ahead month by month (what is already committed in installments),
-// and the lines on the month tapped. Rebuilt from the snapshot on every refresh.
+// Gastos › Fatura: each card's open bill and its lines. Gastos › Parcelas: the bills after it, month by month (only the
+// installments already posted), and the lines of the month tapped. Rebuilt from the snapshot on every refresh.
 import { brl, pct, ddmm, esc, MES } from "../../lib/format.js";
 import { bankName } from "../../lib/model.js";
 
 export const id = "bills";
-export const label = "Faturas";
+export const label = "Fatura";
 
 const FIRST = 12;
 let picked = null; // "YYYY-MM"; null = the open bill
-let showAll = false;
+const showAll = { open: false, ahead: false };
 
 const mon = (ym) => `${MES[Number(ym.slice(5)) - 1]}/${ym.slice(2, 4)}`;
 const k = (n) => (n >= 1000 ? `${(n / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}k` : String(Math.round(n)));
 
 export function render(t) {
   const months = t.bills || [];
-  const sel = months.find((m) => m.month === picked) || months[0] || null;
-  return `${openCard(t.cards, months)}${monthsCard(months, sel)}${sel ? linesCard(sel) : ""}`;
+  const open = months.find((m) => m.open);
+  const ahead = months.filter((m) => !m.open).reduce((a, m) => a + m.amount, 0);
+  const link = ahead > 0 ? `<button class="card tap-card sum-card" data-go="spend:installments"><div class="row"><span><b>${brl(ahead)}</b> já parcelado nas próximas faturas</span><span class="lnk">Parcelas ›</span></div></button>` : "";
+  return `${openCard(t.cards, months) || '<div class="card empty"><b>Sem fatura aberta</b>Nenhum cartão com fatura agora.</div>'}${open ? linesCard(open, showAll.open) : ""}${link}`;
 }
 
 export function bind(pane, t, ctx, { repaint }) {
   pane.onclick = (e) => {
-    const m = e.target.closest("[data-bm]")?.dataset.bm;
-    if (m) { picked = m; showAll = false; repaint(); pane.querySelector("[data-lines]")?.scrollIntoView({ block: "nearest", behavior: "smooth" }); return; }
-    if (e.target.closest('[data-a="all-lines"]')) { showAll = true; repaint(); }
+    if (e.target.closest('[data-a="all-lines"]')) { showAll.open = true; repaint(); }
   };
 }
+
+// Gastos › Parcelas
+export const installments = {
+  id: "installments",
+  label: "Parcelas",
+  render(t) {
+    const months = (t.bills || []).filter((m) => !m.open);
+    if (!months.length) return '<div class="card empty"><b>Nada parcelado</b>Nenhuma parcela lançada para depois da fatura aberta.</div>';
+    const sel = months.find((m) => m.month === picked) || months[0];
+    return `${monthsCard(months, sel)}${linesCard(sel, showAll.ahead)}`;
+  },
+  bind(pane, t, ctx, { repaint }) {
+    pane.onclick = (e) => {
+      const m = e.target.closest("[data-bm]")?.dataset.bm;
+      if (m) { picked = m; showAll.ahead = false; repaint(); pane.querySelector("[data-lines]")?.scrollIntoView({ block: "nearest", behavior: "smooth" }); return; }
+      if (e.target.closest('[data-a="all-lines"]')) { showAll.ahead = true; repaint(); }
+    };
+  },
+};
 
 // Each card's bill now: for a card that tags its charges (Nubank), the charges minus what was paid early.
 function openCard(cards, months) {
@@ -48,16 +67,15 @@ function monthsCard(months, sel) {
   const ahead = months.filter((m) => !m.open).reduce((a, m) => a + m.amount, 0);
   const max = Math.max(...months.map((m) => m.amount), 1);
   return `<div class="card">
-      <div class="row"><div class="label">Próximas faturas</div>${ahead ? `<b>${brl(ahead)}</b>` : ""}</div>
-      <div class="muted sm">${ahead ? "já comprometido em parcelas · " : ""}toque num mês</div>
+      <div class="row"><div class="label">Parcelas nas próximas faturas</div>${ahead ? `<b>${brl(ahead)}</b>` : ""}</div>
+      <div class="muted sm">só o já lançado; compras novas entram a cada atualização · toque num mês</div>
       <div class="bill-bars" role="tablist">${months.map((m) => `<button role="tab" data-bm="${m.month}" class="${m === sel ? "sel" : ""}${m.open ? " open" : ""}" aria-selected="${m === sel}" aria-label="Fatura de ${mon(m.month)}: ${brl(m.amount)}">
           <b>${k(m.amount)}</b><i style="height:${Math.max(3, (m.amount / max) * 72)}px"></i><span>${MES[Number(m.month.slice(5)) - 1]}</span></button>`).join("")}</div>
-      ${months[0]?.open ? '<div class="muted xs">A primeira barra é a fatura aberta; as outras, só as parcelas já lançadas.</div>' : ""}
     </div>`;
 }
 
-function linesCard(m) {
-  const rows = showAll ? m.rows : m.rows.slice(0, FIRST);
+function linesCard(m, all) {
+  const rows = all ? m.rows : m.rows.slice(0, FIRST);
   const banks = [...new Set(m.rows.map((r) => r.bank))];
   const sub = m.open
     ? `${m.rows.length} lançamentos · ${brl(m.charges)}${m.early ? ` − ${brl(m.early)} pagos adiantado` : ""}${m.due ? ` · vence ${ddmm(m.due)}` : ""}`
