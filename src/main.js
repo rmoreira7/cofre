@@ -16,7 +16,7 @@ import * as investments from "./screens/investments/index.js";
 import * as projection from "./screens/projection/index.js";
 import * as settings from "./screens/settings/index.js";
 
-export const APP_VERSION = "0.23.0";
+export const APP_VERSION = "0.24.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, investments, projection, settings };
 

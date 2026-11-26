@@ -16,18 +16,44 @@ export function upcomingRenewals(list, today, within = 60) {
     .sort((a, b) => a.days - b.days);
 }
 
-// Monthly bills paid by hand (phone, internet), from the rules file's `monthly`: [{ name, day: 1–31, amount?, match?:
-// [text in the charge's description], note? }]. Each month's bill is one decision, closed by itself when a transaction
-// whose description contains one of `match` shows up (card or account) in the month before its due date.
+// Monthly bills paid by hand (phone, internet, classes), from the rules file's `monthly`: [{ name, day: 1–31 | every:
+// days, amount?, match?: [text in the transaction's description], note? }]. `day`: due on that day of every month.
+// `every`: due that many days after the last matching payment, a weekend moved to the Monday (a plan that renews from
+// the day it is paid). Each due date is one decision, closed by itself when a matching transaction (card or account)
+// shows up in the 25 days before it.
+const matches = (m) => Array.isArray(m.match) && m.match.length > 0 && m.match.every((x) => typeof x === "string" && x.trim());
 export function validMonthly(list) {
-  return Array.isArray(list) && list.every((m) => m && typeof m.name === "string" && Number.isInteger(m.day) && m.day >= 1 && m.day <= 31
+  return Array.isArray(list) && list.every((m) => m && typeof m.name === "string"
+    && (Number.isInteger(m.day) ? m.day >= 1 && m.day <= 31 && m.every == null : Number.isInteger(m.every) && m.every >= 7 && m.every <= 62 && matches(m))
     && (m.amount == null || Number.isFinite(m.amount)) && (m.note == null || typeof m.note === "string")
-    && (m.match == null || (Array.isArray(m.match) && m.match.every((x) => typeof x === "string" && x.trim()))));
+    && (m.match == null || matches(m)));
 }
 
 const dueIn = (y, mo, day) => { const last = new Date(Date.UTC(y, mo, 0)).getUTCDate(); return `${y}-${String(mo).padStart(2, "0")}-${String(Math.min(day, last)).padStart(2, "0")}`; };
-// The bill still to pay: this month's until 3 days past its date, then next month's.
-export function monthlyDue(m, today) {
+// Every matching transaction in the snapshot, newest first.
+function paymentsOf(snapshot, m) {
+  const keys = (m.match || []).map((x) => x.toLowerCase());
+  const out = [];
+  if (!keys.length) return out;
+  for (const it of snapshot?.items || []) {
+    if (it.error) continue;
+    for (const a of it.accounts || []) for (const t of a.transactions || []) {
+      const desc = String(t.description || "").toLowerCase();
+      if (t.date && keys.some((k) => desc.includes(k))) out.push({ date: t.date.slice(0, 10), amount: Math.abs(t.amount), bank: it.label });
+    }
+  }
+  return out.sort((a, b) => b.date.localeCompare(a.date));
+}
+const weekday = (iso) => new Date(iso + "T12:00:00Z").getUTCDay();
+export const toMonday = (iso) => (weekday(iso) === 6 ? addDays(iso, 2) : weekday(iso) === 0 ? addDays(iso, 1) : iso);
+
+// The bill still to pay. By day: this month's until 3 days past its date, then next month's. Rolling (`every`): the
+// last payment + every days, on a weekday; null before the first payment is seen.
+export function monthlyDue(m, today, snapshot = null) {
+  if (m.every) {
+    const last = paymentsOf(snapshot, m)[0];
+    return last ? toMonday(addDays(last.date, m.every)) : null;
+  }
   let y = Number(today.slice(0, 4)), mo = Number(today.slice(5, 7));
   for (let k = 0; k < 3; k++) {
     const due = dueIn(y, mo, m.day);
@@ -36,21 +62,17 @@ export function monthlyDue(m, today) {
   }
   return null;
 }
-export const nextMonthly = (list, today) => (list || []).map((m) => { const due = monthlyDue(m, today); return { ...m, due, days: daysBetween(today, due) }; });
+export const nextMonthly = (list, today, snapshot = null) => (list || []).flatMap((m) => {
+  const due = monthlyDue(m, today, snapshot);
+  if (!due) return [];
+  const last = m.every ? paymentsOf(snapshot, m)[0] : null;
+  return [{ ...m, due, days: daysBetween(today, due), ...(last && { amount: m.amount ?? last.amount, last }) }];
+});
 
 // The transaction that paid a monthly bill due on `due`: matched by description, from 25 days before to 3 after.
 export function monthlyPayment(snapshot, m, due) {
-  const keys = (m.match || []).map((x) => x.toLowerCase());
-  if (!keys.length) return null;
   const from = addDays(due, -25), to = addDays(due, 3);
-  for (const it of snapshot?.items || []) {
-    if (it.error) continue;
-    for (const a of it.accounts || []) for (const t of a.transactions || []) {
-      const d = t.date?.slice(0, 10), desc = String(t.description || "").toLowerCase();
-      if (d >= from && d <= to && keys.some((k) => desc.includes(k))) return { date: d, amount: Math.abs(t.amount), bank: it.label };
-    }
-  }
-  return null;
+  return paymentsOf(snapshot, m).find((t) => t.date >= from && t.date <= to) || null;
 }
 
 // What money parked in a checking account costs per business day at today's CDI (% per business day).
@@ -95,7 +117,7 @@ export function candidates(v, { lad, renewals = [], monthly = [], snapshot = nul
   }
   for (const e of v.guarantee?.issuers.filter((x) => x.over) || []) out.push({ id: `fgc:${e.issuer}`, kind: "fgc", title: `Tirar o excesso de ${e.issuer}`, issuer: e.issuer, due: today, days: 0, amount: e.over, joint: e.joint, detail: { total: e.amount } });
   for (const r of upcomingRenewals(renewals, today, RENEWAL_WINDOW)) out.push({ id: `ren:${r.name}:${r.date}`, kind: "renewal", title: `${r.name} renova`, name: r.name, due: r.date, days: r.days, amount: r.amount ?? null, every: r.every, detail: r.note || null });
-  for (const m of nextMonthly(monthly, today)) {
+  for (const m of nextMonthly(monthly, today, snapshot)) {
     if (m.days > BILL_WINDOW || monthlyPayment(snapshot, m, m.due)) continue;
     out.push({ id: `mon:${m.name}:${m.due.slice(0, 7)}`, kind: "monthly", title: `Pagar ${m.name}`, name: m.name, due: m.due, days: m.days, amount: m.amount ?? null, match: m.match || [], detail: m.note || null });
   }

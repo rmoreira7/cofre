@@ -43,7 +43,7 @@ export async function toGoogle(r, opts) {
 // Everything the calendar should hold from today on: maturities (7 days' notice), the open card bills (3 days, like the
 // watcher), monthly bills (5 days, when they are usually paid), renewals within a year (7 days) and this year's 31/12
 // (the day before).
-export async function calendarEvents({ mat = [], cards = [], renewals = [], monthly = [], today, bankName = (b) => b, money = (n) => n.toFixed(2) }) {
+export async function calendarEvents({ mat = [], cards = [], renewals = [], monthly = [], snapshot = null, today, bankName = (b) => b, money = (n) => n.toFixed(2) }) {
   const out = [];
   for (const r of mat) if (r.due >= today) out.push(await toGoogle(r, { bankName, money }));
   for (const c of cards) {
@@ -55,7 +55,7 @@ export async function calendarEvents({ mat = [], cards = [], renewals = [], mont
     out.push(await gEvent({ uid: `cofre-ren-${slug(r.name)}-${r.date}@cofre`, date: r.date, kind: "renewal", days: 7,
       summary: `Renova: ${r.name}`, description: [r.amount != null && money(r.amount), r.note].filter(Boolean).join(" · ") }));
   }
-  for (const m of nextMonthly(monthly, today)) {
+  for (const m of nextMonthly(monthly, today, snapshot)) {
     if (m.due < today) continue;
     out.push(await gEvent({ uid: `cofre-mon-${slug(m.name)}-${m.due.slice(0, 7)}@cofre`, date: m.due, kind: "bill", days: 5,
       summary: `Pagar ${m.name}`, description: [m.amount != null && `~${money(m.amount)}`, m.note].filter(Boolean).join(" · ") }));
