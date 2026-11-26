@@ -5,6 +5,7 @@
 import { brl, mil, pct, esc, MES } from "../../lib/format.js";
 import { BANKS, bankName } from "../../lib/model.js";
 import { cdbEquivalent } from "../../lib/income.js";
+import { yearEndSummary } from "../../lib/yearend.js";
 
 export const id = "income";
 export const label = "Rendimentos";
@@ -13,7 +14,7 @@ let histBank = "own";
 
 const BRACKET_COLOR = { 0: "--brand", 0.15: "--ok", 0.175: "--c-travel", 0.2: "--warn", 0.225: "--bad" };
 const LCA_REF = 88;
-export function render(t) {
+export function render(t, ctx) {
   const x = t.income, left = t.left;
   if (!x?.own.n) return '<div class="card empty"><b>Sem aplicações</b>Nenhuma aplicação nas contas conectadas.</div>';
   const o = x.own, salary = left?.avg?.salary;
@@ -50,6 +51,7 @@ export function render(t) {
     "o que já venceu e foi reaplicado não entra no acumulado",
   ].filter(Boolean).join(" · ");
   return `${card}
+    ${yearEndCard(ctx?.data?.yearEnd, t.today)}
     ${historyCard(t.history, x)}
     <div class="card"><div class="label">Por banco</div><div class="list mt6">${own.map(bank).join("")}</div><div class="muted xs mt8">${notes}</div></div>
     ${brk}${jointCard}`;
@@ -99,4 +101,21 @@ function historyCard(hist, x) {
       </table>
       <div class="muted xs mt6">${hist[0].partial ? `* desde ${hist[0].from.slice(8, 10)}/${hist[0].from.slice(5, 7)}, a primeira atualização com as aplicações. ` : ""}Medido aplicação por aplicação, líquido de IR: um resgate parcial não vira perda e um vencimento não derruba o mês. Sem estimativa quando a maior parte do dinheiro mudou no meio do período.</div>
     </div>`;
+}
+
+// The balances kept for the tax return: this year's from December on, last year's until the next December.
+function yearEndCard(all, today) {
+  const year = Number(today.slice(5, 7)) === 12 ? today.slice(0, 4) : String(Number(today.slice(0, 4)) - 1);
+  const ye = yearEndSummary(all, year);
+  const current = year === today.slice(0, 4);
+  if (!ye && !current) return "";
+  const day = (d) => `${Number(d.slice(8, 10))}/${d.slice(5, 7)}`;
+  const status = !ye ? "Ainda nada guardado."
+    : ye.done ? `Todos os bancos guardados em 31/12.`
+    : current ? `Atualize o Cofre no dia 31/12: a última atualização do ano fica guardada (a agenda Cofre lembra na véspera).`
+    : `Nem todos os bancos foram guardados em 31/12: para esses, use o informe de rendimentos do banco.`;
+  const rows = (ye?.banks || []).map((b) => `<div><span class="l"><span><i class="bankdot" style="background:${BANKS[b.label]?.color || "var(--ink-3)"}"></i><b>${esc(bankName(b.label))}</b></span><small>em ${day(b.d)}${b.onTime ? " ✓" : ""} · conta ${brl(b.checking)} · ${b.positions} ${b.positions === 1 ? "aplicação" : "aplicações"}</small></span><b class="nw">${brl(b.checking + b.invested)}</b></div>`).join("");
+  return `<div class="card"><div class="row"><div class="label">Saldos de 31/12/${year}</div><span class="muted sm">IR ${Number(year) + 1}</span></div>
+    <div class="muted sm mt6">${status}</div>${rows ? `<div class="list mt6">${rows}</div>` : ""}
+    <div class="muted xs mt8">Para Bens e Direitos. O informe de rendimentos de cada banco é quem vale; isto serve para conferir.</div></div>`;
 }

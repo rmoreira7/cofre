@@ -2,7 +2,7 @@
 import { brl, mil, pct, MES, esc } from "../../lib/format.js";
 import { bankName } from "../../lib/model.js";
 import { maturitiesIcs } from "../../lib/ics.js";
-import { syncMaturities, SCOPE } from "../../lib/gcal.js";
+import { calendarEvents, syncCalendar, SCOPE } from "../../lib/gcal.js";
 import { requestToken } from "../../lib/gauth.js";
 import { localToday } from "../../lib/format.js";
 import { download } from "../../ui/shell.js";
@@ -48,13 +48,17 @@ export function bind(pane, t, ctx) {
     syncing = true; gstat.className = "muted sm mb10"; gstat.textContent = "Entrando no Google…";
     try {
       const token = await requestToken({ clientId: g.clientId, scope: SCOPE });
-      gstat.textContent = "Enviando vencimentos…";
-      const rows = mat.rows.filter((r) => r.days >= 0);
-      const r = await syncMaturities(rows, { token, calId: g.calId, today: localToday(), bankName, money: (n) => brl(n, 2) });
-      await ctx.update((d) => ({ ...d, gcal: { ...(d.gcal || {}), calId: r.calId, last: { at: new Date().toISOString(), total: rows.length } } }));
+      gstat.textContent = "Enviando para a agenda…";
+      const today = localToday(), money = (n) => brl(n, 2);
+      const want = await calendarEvents({ mat: mat.rows, cards: t.cards, renewals: ctx.data.rules?.renewals || [], today, bankName, money });
+      const r = await syncCalendar(want, { token, calId: g.calId, today });
+      await ctx.update((d) => ({ ...d, gcal: { ...(d.gcal || {}), calId: r.calId, last: { at: new Date().toISOString(), total: want.length } } }));
+      const kinds = { maturity: 0, bill: 0, renewal: 0 };
+      for (const e of want) if (e.extendedProperties.private.kind in kinds) kinds[e.extendedProperties.private.kind]++;
+      const what = [kinds.maturity && `${kinds.maturity} vencimentos`, kinds.bill && `${kinds.bill} faturas`, kinds.renewal && `${kinds.renewal} renovações`].filter(Boolean).join(", ");
       const bits = [r.added && `${r.added} novos`, r.updated && `${r.updated} atualizados`, r.removed && `${r.removed} removidos`].filter(Boolean);
       gstat.className = "ok sm mb10";
-      gstat.textContent = `Agenda Cofre em dia: ${rows.length} vencimentos${bits.length ? ` (${bits.join(", ")})` : ", nada mudou"}.`;
+      gstat.textContent = `Agenda Cofre em dia: ${what || "nada pela frente"}${bits.length ? ` (${bits.join(", ")})` : ", nada mudou"}.`;
     } catch (e) {
       gstat.className = "bad sm mb10";
       gstat.textContent = e.status === 403 ? "O Google recusou: confira se a Google Calendar API está ativa e o escopo calendar.app.created foi adicionado." : e.message;

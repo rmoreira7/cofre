@@ -97,3 +97,17 @@ test("the receita of a maturity: Próximos 30 dias, Vencimentos and the decision
   assert.equal(mat.earn.tax, 40);
   assert.ok(mat.earn.est, "a CDI bond with today's CDI gets the estimate");
 });
+
+test("Rendimentos: last year's 31/12 balances until December; this year's from December on", async () => {
+  const { keepYearEnd } = await import("../src/lib/yearend.js");
+  const inc = investments.subs.find((x) => x.id === "income");
+  const t = investments.context(ctx);
+  const yearEnd = keepYearEnd(keepYearEnd({}, data.snapshot, "2025-12-31"), data.snapshot, "2026-11-20");
+  const nov = inc.render(t, { ...ctx, data: { ...data, yearEnd } });
+  assert.match(nov, /Saldos de 31\/12\/2025/);
+  assert.match(nov, /Todos os bancos guardados em 31\/12/);
+  const dec = inc.render({ ...t, today: "2026-12-05" }, { ...ctx, data: { ...data, yearEnd } });
+  assert.match(dec, /Saldos de 31\/12\/2026/);
+  assert.match(dec, /em 20\/11/);
+  assert.match(dec, /Atualize o Cofre no dia 31\/12/);
+});

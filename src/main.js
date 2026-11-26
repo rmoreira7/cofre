@@ -5,6 +5,7 @@ import { DEFAULT_TARGET } from "./lib/spend.js";
 import { slim, holdings, primaryEntity, bankName, shouldAutoRefresh } from "./lib/model.js";
 import { localToday } from "./lib/format.js";
 import { logPositions } from "./lib/income.js";
+import { keepYearEnd } from "./lib/yearend.js";
 import { buildView } from "./lib/view.js";
 import { merge, same, canon } from "./lib/sync.js";
 import { pullWatcher, pushPhone } from "./lib/remote.js";
@@ -15,7 +16,7 @@ import * as investments from "./screens/investments/index.js";
 import * as projection from "./screens/projection/index.js";
 import * as settings from "./screens/settings/index.js";
 
-export const APP_VERSION = "0.21.0";
+export const APP_VERSION = "0.22.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, investments, projection, settings };
 
@@ -173,7 +174,7 @@ async function refresh() {
     const h = me ? holdings(next, state.data.rules, me) : null;
     const log = (state.data.wealthLog || []).filter((w) => w.d !== localToday());
     if (h) log.push({ d: localToday(), banks: Object.fromEntries(h.banks.map((b) => [b.label, Math.round(b.total * 100) / 100])) });
-    await update((d) => ({ ...d, snapshot: next, wealthLog: log, invLog: logPositions(d.invLog, next, localToday()) }));
+    await update((d) => ({ ...d, snapshot: next, wealthLog: log, invLog: logPositions(d.invLog, next, localToday()), yearEnd: keepYearEnd(d.yearEnd, next, localToday()) }));
     state.busy = false;
     say(failed.length ? `Falhou: ${failed.map((f) => bankName(f.label)).join(", ")} (mantidos os dados anteriores)` : "");
   } catch (e) {

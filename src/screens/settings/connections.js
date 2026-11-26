@@ -187,7 +187,7 @@ async function importRules(el, ctx, input) {
 function gcalCard(d) {
   const g = d.gcal || {};
   if (!g.clientId) return `<div class="card">
-    <div class="muted sm">Envia os vencimentos para uma agenda <b>Cofre</b> no Google Agenda, em Tangerina. O app só enxerga a agenda que ele mesmo cria.</div>
+    <div class="muted sm">Envia vencimentos (Tangerina), faturas e renovações para uma agenda <b>Cofre</b> no Google Agenda. O app só enxerga a agenda que ele mesmo cria.</div>
     <form data-f="gcal" class="mt10" autocomplete="off">
       <label class="in">Client ID (OAuth, aplicativo da Web)<input name="client" required spellcheck="false" autocapitalize="off" placeholder="…apps.googleusercontent.com"></label>
       <div class="err" role="alert"></div><button class="btn ghost">Salvar</button>

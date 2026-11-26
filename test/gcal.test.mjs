@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { syncMaturities, eventId, toGoogle, TANGERINA_ID } from "../src/lib/gcal.js";
+import { syncCalendar, calendarEvents, eventId, toGoogle, remindAt, COLORS, TANGERINA_ID } from "../src/lib/gcal.js";
 
 const rows = [
   { due: "2027-02-10", bank: "xp", issuer: "Banco Teste", n: 2, balance: 1000, rates: ["110% CDI"] },
@@ -37,6 +37,12 @@ function fakeGoogle({ calendars = {}, conflictIds = [] } = {}) {
 }
 
 const base = { token: "tok", today: "2026-11-25", bankName: (b) => b.toUpperCase(), money: (n) => `R$ ${n}` };
+const kind = (e) => e.extendedProperties.private.kind;
+// Maturities only: the year-end reminder is tested on its own below.
+async function syncMaturities(rows, opts) {
+  const want = (await calendarEvents({ mat: rows, ...opts })).filter((e) => kind(e) === "maturity");
+  return syncCalendar(want, opts);
+}
 
 test("first sync creates the Cofre calendar and Tangerina all-day events with a 09:00 reminder a week before", async () => {
   const g = fakeGoogle();
@@ -76,4 +82,40 @@ test("a deleted calendar is recreated; an id taken by a cancelled event is updat
   assert.notEqual(r.calId, "gone");
   assert.equal(r.added, 1);
   assert.equal(r.updated, 1);
+});
+
+test("bills (3 days' notice), renewals within a year (7 days) and this year's 31/12 (the day before), each in its color", async () => {
+  const cards = [
+    { bank: "nubank", name: "Nubank", due: "2026-12-07", bill: 1234.5, exact: true },
+    { bank: "xp", name: "XP", due: "2026-12-15", bill: 800, exact: false },
+    { bank: "itau", name: "Itaú", due: "2026-12-10", bill: 0 },
+    { bank: "c6", name: "C6", due: "2026-11-20", bill: 50 },
+  ];
+  const renewals = [{ name: "Plano X", date: "2027-01-10", amount: 25, note: "cancelar antes" }, { name: "Velho", date: "2026-10-01" }, { name: "Longe", date: "2028-06-01" }];
+  const evs = await calendarEvents({ mat: rows, cards, renewals, ...base });
+  const by = (k) => evs.filter((e) => kind(e) === k);
+  assert.equal(by("maturity").length, 2);
+  assert.deepEqual(by("bill").map((e) => [e.start.date, e.summary, e.description]),
+    [["2026-12-07", "Fatura Nubank", "R$ 1234.5"], ["2026-12-15", "Fatura XP", "R$ 800 (fatura aberta, pode mudar)"]]);
+  assert.deepEqual(by("renewal").map((e) => [e.start.date, e.summary, e.description]), [["2027-01-10", "Renova: Plano X", "R$ 25 · cancelar antes"]]);
+  const [ye] = by("yearend");
+  assert.equal(ye.start.date, "2026-12-31");
+  assert.match(ye.description, /IR 2027/);
+  for (const [k, days] of [["bill", 3], ["renewal", 7], ["yearend", 1], ["maturity", 7]]) for (const e of by(k)) {
+    assert.equal(e.colorId, COLORS[k]);
+    assert.equal(e.reminders.overrides[0].minutes, remindAt(days));
+  }
+  assert.equal(new Set(evs.map((e) => e.id)).size, evs.length, "ids are unique");
+});
+
+test("a bill keeps its event through the month as the amount changes; paid off, the future event goes", async () => {
+  const g = fakeGoogle();
+  const cards = [{ bank: "nubank", name: "Nubank", due: "2026-12-07", bill: 100, exact: true }];
+  const sync = async (cs, calId) => syncCalendar(await calendarEvents({ cards: cs, ...base }), { ...base, calId, fetchFn: g.fetchFn });
+  const first = await sync(cards);
+  const again = await sync([{ ...cards[0], bill: 150 }], first.calId);
+  assert.deepEqual([again.added, again.updated, again.kept], [0, 1, 1]);
+  const paid = await sync([{ ...cards[0], bill: 0 }], first.calId);
+  assert.equal(paid.removed, 1);
+  assert.equal(Object.keys(g.calendars[first.calId]).length, 1, "only the 31/12 reminder is left");
 });
