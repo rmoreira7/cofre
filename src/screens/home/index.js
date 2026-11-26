@@ -4,6 +4,7 @@
 import { tabbedScreen } from "../../ui/tabbed.js";
 import { ladder } from "../../lib/ladder.js";
 import { candidates, upcoming, board } from "../../lib/decisions.js";
+import { listsOf } from "../../lib/lists.js";
 import * as summary from "./summary.js";
 import * as agenda from "./agenda.js";
 import * as decisions from "./decisions.js";
@@ -17,7 +18,7 @@ export const screen = {
   context(ctx) {
     const v = ctx.view(), d = ctx.data, s = d.settings || {};
     if (cache.at !== d.snapshot.at) cache = { at: d.snapshot.at, lad: ladder(v.mat.rows, { today: v.today }) };
-    const opts = { today: v.today, idleCash: s.idleCash ?? 5000, cdbMin: s.cdbMin ?? 110, cdiDaily: d.snapshot.cdi?.daily ?? null, renewals: d.rules?.renewals || [], monthly: d.rules?.monthly || [], snapshot: d.snapshot };
+    const opts = { today: v.today, idleCash: s.idleCash ?? 5000, cdbMin: s.cdbMin ?? 110, cdiDaily: d.snapshot.cdi?.daily ?? null, ...listsOf(d), snapshot: d.snapshot };
     const cands = candidates(v, { ...opts, lad: cache.lad });
     return { v, today: v.today, board: board(cands, d.decisions, d.snapshot, opts), upcoming: upcoming(v, opts) };
   },

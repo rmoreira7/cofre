@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const GLOBALS = new Set(["Math", "Number", "String", "Object", "Array", "JSON", "Date", "Set", "Map", "Promise", "URL", "Blob", "Boolean", "RegExp", "Error",
+const GLOBALS = new Set(["Math", "Number", "String", "Object", "Array", "JSON", "Date", "Set", "Map", "Promise", "URL", "Blob", "FormData", "Boolean", "RegExp", "Error",
   "document", "window", "navigator", "location", "setTimeout", "clearTimeout", "confirm", "alert", "prompt", "parseInt", "parseFloat", "isFinite", "isNaN",
   "encodeURIComponent", "requestAnimationFrame", "console", "matchMedia", "fetch", "localStorage", "structuredClone", "Intl", "Event"]);
 const KEYWORDS = new Set(["if", "for", "while", "switch", "return", "catch", "function", "typeof", "await", "new", "of", "in", "do", "else", "case", "throw", "async", "import", "export", "super", "void", "delete", "yield"]);

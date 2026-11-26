@@ -4,6 +4,7 @@ import { bankName } from "../../lib/model.js";
 import { maturitiesIcs } from "../../lib/ics.js";
 import { calendarEvents, syncCalendar, SCOPE } from "../../lib/gcal.js";
 import { requestToken } from "../../lib/gauth.js";
+import { listsOf } from "../../lib/lists.js";
 import { localToday } from "../../lib/format.js";
 import { download } from "../../ui/shell.js";
 import { earnTiles } from "../../ui/earn.js";
@@ -50,7 +51,7 @@ export function bind(pane, t, ctx) {
       const token = await requestToken({ clientId: g.clientId, scope: SCOPE });
       gstat.textContent = "Enviando para a agenda…";
       const today = localToday(), money = (n) => brl(n, 2);
-      const want = await calendarEvents({ mat: mat.rows, cards: t.cards, renewals: ctx.data.rules?.renewals || [], monthly: ctx.data.rules?.monthly || [], snapshot: ctx.data.snapshot, today, bankName, money });
+      const want = await calendarEvents({ mat: mat.rows, cards: t.cards, ...listsOf(ctx.data), snapshot: ctx.data.snapshot, today, bankName, money });
       const r = await syncCalendar(want, { token, calId: g.calId, today });
       await ctx.update((d) => ({ ...d, gcal: { ...(d.gcal || {}), calId: r.calId, last: { at: new Date().toISOString(), total: want.length } } }));
       const kinds = { maturity: 0, bill: 0, renewal: 0 };

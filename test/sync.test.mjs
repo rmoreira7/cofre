@@ -88,3 +88,18 @@ test("phone gist missing or unreadable leaves the state alone", async () => {
   assert.equal(await pullPhone(s, { gist: "g", key, fetch: async () => ({ ok: true, status: 200, text: async () => "garbage" }) }), "error");
   assert.deepEqual(s.decisions, {});
 });
+
+test("the phone's contas do mês and renewals reach the watcher state; an older or invalid copy does not replace them", async () => {
+  const s = withMsg();
+  const lists = { monthly: [{ name: "Conta A", day: 10 }], renewals: [{ name: "Plano", date: "2027-01-01" }], ts: T };
+  const box = (v) => seal({ v: 1, decisions: {}, undone: {}, ...v }, key);
+  const from = async (v) => { const b = await box(v); return pullPhone(s, { gist: "g1", key, fetch: async () => ({ ok: true, status: 200, text: async () => b }), now: T }); };
+  await from({ lists });
+  assert.deepEqual(s.lists, lists);
+  await from({ lists: { ...lists, monthly: [], ts: T - 1 } });
+  assert.equal(s.lists.monthly.length, 1, "older copy ignored");
+  await from({ lists: { ...lists, monthly: [{ name: "", day: 99 }], ts: T + 1 } });
+  assert.equal(s.lists.monthly[0].name, "Conta A", "invalid copy ignored");
+  await from({});
+  assert.deepEqual(s.lists, lists, "a phone without lists leaves them");
+});

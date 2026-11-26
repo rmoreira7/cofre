@@ -16,7 +16,7 @@ import * as investments from "./screens/investments/index.js";
 import * as projection from "./screens/projection/index.js";
 import * as settings from "./screens/settings/index.js";
 
-export const APP_VERSION = "0.25.0";
+export const APP_VERSION = "0.26.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, investments, projection, settings };
 
@@ -94,9 +94,11 @@ function syncDecisions({ force = false } = {}) {
         changed = !same(local, m);
         return changed ? { ...d, ...m } : d;
       });
-      const h = canon(m);
+      // The contas do mês and renewals edited on the phone travel with the decisions (Ajustes › Contas).
+      const lists = state.data.lists ? { lists: state.data.lists } : {};
+      const h = canon({ ...m, ...lists });
       if (cfg.gist && cfg.token && h !== state.data.syncPushed) {
-        await pushPhone({ gist: cfg.gist, token: cfg.token, key: cfg.key, value: { v: 1, ...m } });
+        await pushPhone({ gist: cfg.gist, token: cfg.token, key: cfg.key, value: { v: 1, ...m, ...lists } });
         await update((d) => ({ ...d, syncPushed: h }));
       }
       state.sync = { at: new Date(), err: null, write: Boolean(cfg.gist) };

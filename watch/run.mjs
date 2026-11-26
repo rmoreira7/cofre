@@ -71,9 +71,9 @@ const items = need("PLUGGY_ITEMS").split(",").filter((x) => x.trim()).map((x) =>
 });
 const rules = { entities: JSON.parse(need("COFRE_ENTITIES")) };
 // Optional: subscriptions and annual plans to warn about before they renew (a private secret, never in the repo).
-const renewals = process.env.COFRE_RENEWALS ? JSON.parse(process.env.COFRE_RENEWALS) : [];
+const envRenewals = process.env.COFRE_RENEWALS ? JSON.parse(process.env.COFRE_RENEWALS) : [];
 // Optional: monthly bills paid by hand ({ name, day, amount?, match? }), same kind of secret.
-const monthly = process.env.COFRE_MONTHLY ? JSON.parse(process.env.COFRE_MONTHLY) : [];
+const envMonthly = process.env.COFRE_MONTHLY ? JSON.parse(process.env.COFRE_MONTHLY) : [];
 const today = process.env.TODAY || localToday();
 const tg = dry ? null : createTelegram({ token: need("TELEGRAM_BOT_TOKEN"), chatId: need("TELEGRAM_CHAT_ID") });
 const statePath = process.env.STATE_PATH, stateKey = process.env.COFRE_STATE_KEY;
@@ -84,6 +84,9 @@ const state = withState ? await load(statePath, stateKey) : structuredClone(EMPT
 if (withState && tg) console.log(`taps: ${await applyTaps(state, tg, { chatId: need("TELEGRAM_CHAT_ID"), today })}`);
 if (withState) console.log(`phone: ${await pullPhone(state, { gist: process.env.COFRE_PHONE_GIST, key: stateKey })}`);
 if (withState && tg) console.log(`edited: ${await syncMessages(state, tg)}`);
+// Lists edited on the phone win over the secrets (which only seed a phone that never edited them).
+const renewals = state.lists?.renewals || envRenewals, monthly = state.lists?.monthly || envMonthly;
+console.log(`lists: ${state.lists ? "phone" : "secrets"}`);
 
 const pulled = await createPluggy({ clientId: need("PLUGGY_CLIENT_ID"), clientSecret: need("PLUGGY_CLIENT_SECRET") }).pullAll(items);
 const failed = pulled.items.filter((i) => i.error).length;

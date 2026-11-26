@@ -2,6 +2,7 @@
 import { brl, mil, ddmm, esc, MES } from "../../lib/format.js";
 import { GO } from "../../ui/shell.js";
 import { agendaRow } from "../../ui/agenda.js";
+import { agendaTotals } from "../../lib/agenda.js";
 
 export const id = "summary";
 export const label = "Resumo";
@@ -69,7 +70,7 @@ function billsSummary(v) {
 const SHOWN = 7;
 function timelineCard(list) {
   if (!list?.length) return "";
-  const pay = list.filter((e) => e.pay && !e.paid).reduce((a, e) => a - (e.amount || 0), 0);
+  const pay = agendaTotals(list).out;
   return `<button class="card tap-card sum-card" data-go="home:agenda">
     <div class="row"><div class="label">Próximos 30 dias</div><span class="muted sm">${pay ? `a pagar ${brl(pay)}` : "entra · sai · vence"}</span></div>
     <div class="row"><div class="tl mt6 grow">${list.slice(0, SHOWN).map(agendaRow).join("")}</div>${GO}</div>

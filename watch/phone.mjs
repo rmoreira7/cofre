@@ -2,6 +2,7 @@
 // watcher's state, and merged in (src/lib/sync.js). The watcher never writes the gist: one writer per file.
 import { unseal } from "../src/lib/seal.js";
 import { merge, canon } from "../src/lib/sync.js";
+import { validMonthly, validRenewals } from "../src/lib/decisions.js";
 
 export const PHONE_FILE = "phone.enc";
 
@@ -28,5 +29,8 @@ export async function pullPhone(state, { gist, key, owner = process.env.GITHUB_R
   }
   state.decisions = m.decisions;
   state.undone = m.undone;
+  // The phone's own contas do mês and renewals (Ajustes › Contas), kept so a run that cannot read the gist still has them.
+  const l = phone.lists;
+  if (l && validMonthly(l.monthly || []) && validRenewals(l.renewals || []) && !((state.lists?.ts || 0) > (l.ts || 0))) state.lists = l;
   return String(changed);
 }

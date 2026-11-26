@@ -20,13 +20,13 @@ export function upcomingRenewals(list, today, within = 60) {
 // days, amount?, match?: [text in the transaction's description], note? }]. `day`: due on that day of every month.
 // `every`: due that many days after the last matching payment, a Friday to Sunday moved to the Monday (a plan that renews from
 // the day it is paid). Each due date is one decision, closed by itself when a matching transaction (card or account)
-// shows up in the 25 days before it.
+// shows up in the 25 days before it. `card`: charged on a credit card, so the money leaves with that card's bill.
 const matches = (m) => Array.isArray(m.match) && m.match.length > 0 && m.match.every((x) => typeof x === "string" && x.trim());
 export function validMonthly(list) {
   return Array.isArray(list) && list.every((m) => m && typeof m.name === "string"
     && (Number.isInteger(m.day) ? m.day >= 1 && m.day <= 31 && m.every == null : Number.isInteger(m.every) && m.every >= 7 && m.every <= 62 && matches(m))
     && (m.amount == null || Number.isFinite(m.amount)) && (m.note == null || typeof m.note === "string")
-    && (m.match == null || matches(m)));
+    && (m.match == null || matches(m)) && (m.card == null || typeof m.card === "boolean") && m.name.trim().length > 0);
 }
 
 const dueIn = (y, mo, day) => { const last = new Date(Date.UTC(y, mo, 0)).getUTCDate(); return `${y}-${String(mo).padStart(2, "0")}-${String(Math.min(day, last)).padStart(2, "0")}`; };
