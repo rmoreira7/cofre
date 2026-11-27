@@ -26,3 +26,23 @@ test("found charges, a renewal with no charge (yearly) and a conta paid by bolet
 test("nothing recurring: an empty state", () => {
   assert.match(render({ subscriptions: subscriptions([], { lists: {}, today }) }), /Nenhuma assinatura/);
 });
+
+test("names read like a person's; a hidden one leaves the totals and can come back", async () => {
+  const { niceName } = await import("../src/lib/recurring.js");
+  assert.deepEqual(["Op P*fatura Op", "Milhas Clube Milhas", "Google Youtube", "Google One"].map(niceName), ["Op", "Clube Milhas", "YouTube", "Google One"]);
+  const all = subscriptions(rows, { lists: {}, today });
+  const key = all.monthly.find((m) => m.name === "Plano Streaming").key;
+  const s = subscriptions(rows, { lists: {}, today, hidden: [key] });
+  assert.deepEqual(s.monthly.map((m) => m.name), ["Clube Socio"]);
+  assert.deepEqual(s.hidden.map((m) => m.name), ["Plano Streaming"]);
+  assert.equal(s.perMonth, 100);
+  const html = render({ subscriptions: s });
+  assert.match(html, /data-hide="card:clube socio"/);
+  assert.match(html, /Ocultas \(1\)/);
+  let saved;
+  const pane = {};
+  const { bind } = await import("../src/screens/spend/subs.js");
+  bind(pane, {}, { data: { hiddenSubs: [key] }, save: async (d) => { saved = d; } }, { repaint() {}, rerender() {} });
+  pane.onclick({ target: { closest: (sel) => (sel === "[data-show]" ? { dataset: { show: key } } : null) } });
+  assert.deepEqual(saved.hiddenSubs, []);
+});

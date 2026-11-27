@@ -1,6 +1,6 @@
 // Caches the app shell only. API calls (api.pluggy.ai) are never cached here:
 // the data lives encrypted in IndexedDB, not in the HTTP cache.
-const CACHE = "cofre-0.35.2";
+const CACHE = "cofre-0.35.3";
 const SHELL = [
   "./", "index.html", "oauth.html", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png",
   "icons/icon-512.png", "src/app.css", "src/tokens.css", "src/lib/agenda.js", "src/lib/bio.js",

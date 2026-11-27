@@ -68,12 +68,29 @@ function detect(rows, today) {
 
 // Gastos › Assinaturas: what keeps costing every month or year. The charges found in the statements, plus the renewals
 // and contas do mês with a price that no charge accounts for yet (an annual plan, a bill paid by boleto). A renewal
-// that is a found charge lends it its date. → { monthly: [...], yearly: [...], perMonth, perYear }; each item
-// { name, amount, per: "month" | "year", src: "card" | "account" | "list", day?, renews?, days?, cluster? }.
-export function subscriptions(rows, { lists = {}, today }) {
+// that is a found charge lends it its date. Hidden (keys tapped away on the screen) are listed apart, out of the totals.
+// → { monthly: [...], yearly: [...], hidden: [...], perMonth, perYear }; each item
+// { key, name, amount, per: "month" | "year", src: "card" | "account" | "list", day?, renews?, days?, cluster? }.
+// A statement merchant as a person would name it: "Op P*fatura Op" → "Op", "Milhas Clube Milhas" → "Clube
+// Milhas", "Google Youtube" → "YouTube". A word that comes back later moves there; a payment processor's prefix
+// ("P*", "Pg *") and billing words go; a few brands get their own spelling.
+const BILLING = new Set(["fatura", "pagamento", "pgto", "assinatura", "mensalidade", "recorrente"]);
+const BRAND = { youtube: "YouTube", ifood: "iFood", iphone: "iPhone", icloud: "iCloud", hbo: "HBO", tv: "TV", xp: "XP" };
+export function niceName(name) {
+  let w = String(name || "").replace(/\b[a-z]{1,4}\s?\*\s?/gi, "").split(/\s+/).filter(Boolean);
+  while (w.length > 1 && w.slice(1).some((x) => x.toLowerCase() === w[0].toLowerCase())) w.shift();
+  w = w.filter((x, i, a) => a.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i);
+  const kept = w.filter((x) => !BILLING.has(x.toLowerCase()));
+  if (kept.length) w = kept;
+  if (w.length > 1 && w[0].toLowerCase() === "google" && w[1].toLowerCase() === "youtube") w.shift();
+  const out = w.map((x) => BRAND[x.toLowerCase()] || x).join(" ");
+  return out || String(name || "");
+}
+
+export function subscriptions(rows, { lists = {}, today, hidden = [] }) {
   const found = detect(rows, today);
   const hit = (desc, r) => { const p = plain(merchant(desc)), w = plain(r.name); return w.length >= 5 && p.length >= 5 && (p.includes(w) || w.includes(p)); };
-  const monthlyOut = found.map((f) => ({ name: f.name, amount: f.amount, per: "month", src: f.src, day: f.day ?? null, cluster: f.cluster, desc: f.desc }));
+  const monthlyOut = found.map((f) => ({ key: f.key, name: niceName(f.name), amount: f.amount, per: "month", src: f.src, day: f.day ?? null, cluster: f.cluster, desc: f.desc }));
   const yearly = [];
   for (const r of lists.renewals || []) {
     const days = daysBetween(today, r.date);
@@ -81,17 +98,19 @@ export function subscriptions(rows, { lists = {}, today }) {
     const m = monthlyOut.find((f) => hit(f.desc, r));
     if (m) { Object.assign(m, next); continue; }
     if (!(r.amount > 0)) continue;
-    (r.every === "year" ? yearly : monthlyOut).push({ name: r.name, amount: r.amount, per: r.every === "year" ? "year" : "month", src: "list", ...next });
+    (r.every === "year" ? yearly : monthlyOut).push({ key: `list:${plain(r.name)}`, name: r.name, amount: r.amount, per: r.every === "year" ? "year" : "month", src: "list", ...next });
   }
   for (const c of lists.monthly || []) {
     if (!(c.amount > 0)) continue;
     const d = (x) => String(x || "").toLowerCase();
     if (found.some((f) => (c.match || []).some((x) => d(f.desc).includes(d(x))))) continue;
-    monthlyOut.push({ name: c.name, amount: c.amount, per: "month", src: "list", day: c.day ?? null });
+    monthlyOut.push({ key: `list:${plain(c.name)}`, name: c.name, amount: c.amount, per: "month", src: "list", day: c.day ?? null });
   }
   monthlyOut.forEach((m) => delete m.desc);
-  monthlyOut.sort((a, b) => b.amount - a.amount);
-  yearly.sort((a, b) => (a.renews || "9").localeCompare(b.renews || "9"));
-  const perMonth = monthlyOut.reduce((s, m) => s + m.amount, 0) + yearly.reduce((s, y) => s + y.amount / 12, 0);
-  return { monthly: monthlyOut, yearly, perMonth, perYear: perMonth * 12 };
+  const off = [...monthlyOut, ...yearly].filter((x) => hidden.includes(x.key));
+  const on = (xs) => xs.filter((x) => !hidden.includes(x.key));
+  const mo = on(monthlyOut).sort((a, b) => b.amount - a.amount);
+  const yr = on(yearly).sort((a, b) => (a.renews || "9").localeCompare(b.renews || "9"));
+  const perMonth = mo.reduce((s, m) => s + m.amount, 0) + yr.reduce((s, y) => s + y.amount / 12, 0);
+  return { monthly: mo, yearly: yr, hidden: off, perMonth, perYear: perMonth * 12 };
 }

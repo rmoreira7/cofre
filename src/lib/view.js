@@ -62,7 +62,7 @@ export function buildView(data, today) {
   v.periods = Object.fromEntries((month.long || month.history).filter((h) => h.month !== month.month).map((h) => [h.month, { ...period(h.month, pOpts), cardOnly: Boolean(h.cardOnly) }]));
   v.pace = pace(month, { rows, cycles, monthly: lists.monthly, renewals: lists.renewals, snapshot: snap, today });
   v.recurring = recurring(rows, { lists, ignored: data.ignoredRecurring || [], today });
-  v.subscriptions = subscriptions(rows, { lists, today });
+  v.subscriptions = subscriptions(rows, { lists, today, hidden: data.hiddenSubs || [] });
   v.cash = cashOf(mine, { earmark: s.billReserve || 0 });
   v.agenda = agenda({ cards: v.cards, bills: v.bills, mat: v.mat, salary: salaryForecast(income, { today, days: 90 }), monthly: lists.monthly, renewals: lists.renewals, snapshot: snap, cash: v.cash, today, days: 90 });
   v.timeline = v.agenda.filter((e) => e.late || daysBetween(today, e.date) <= 30);
