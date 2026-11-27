@@ -26,7 +26,7 @@ per business day, FGC, failed banks, expiring consents). The renewal list is a p
 and a `renewals` list in the rules file, never in this repository.
 
 Each decision is its own Telegram message with **✓ Feito / ⏰ Adiar** buttons (then **↩ Desfazer**). `taps.yml` picks up
-the taps every ~5 minutes and edits the message; the daily run stops repeating a decided item, checks it against the
+the taps every ~10 minutes from 07:00 to 23:00 (started by cron-job.org; a network blip skips the run) and edits the message; the daily run stops repeating a decided item, checks it against the
 bank data with the app's `outcome()`, and reports once (confirmed, or not found: it then speaks again). That memory is
 `state.enc` on the `watch-state` branch, AES-256-GCM with the `COFRE_STATE_KEY` secret: public repository, unreadable
 file. Decision ids are the app's (`src/lib/decisions.js`). This is

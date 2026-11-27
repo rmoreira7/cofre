@@ -81,6 +81,15 @@ export function pruneMessages(state, today) {
   state.messages = Object.fromEntries(Object.entries(state.messages).filter(([, m]) => m.at >= c));
 }
 
+// A connection that never reached Telegram or GitHub (timeout, DNS, reset), as opposed to an API answer saying no.
+const NET = /^(ETIMEDOUT|ENETUNREACH|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENOTFOUND|EPIPE|UND_ERR_\w+)$/;
+export function isNetworkError(e) {
+  for (let c = e, i = 0; c && i < 5; c = c.cause, i++) {
+    if (NET.test(c.code || "") || (c.errors || []).some((x) => NET.test(x.code || ""))) return true;
+  }
+  return false;
+}
+
 // CLI: node watch/taps.mjs — env TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, COFRE_STATE_KEY, STATE_PATH, and optionally
 // COFRE_PHONE_GIST (the phone's decisions, merged in).
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -93,8 +102,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const state = await load(path, key);
   const before = canon(state);
   const tg = createTelegram({ token: need("TELEGRAM_BOT_TOKEN"), chatId: need("TELEGRAM_CHAT_ID") });
-  console.log(`taps: ${await applyTaps(state, tg, { chatId: need("TELEGRAM_CHAT_ID") })}`);
-  console.log(`phone: ${await pullPhone(state, { gist: process.env.COFRE_PHONE_GIST, key })}`);
-  console.log(`edited: ${await syncMessages(state, tg)}`);
+  try {
+    console.log(`taps: ${await applyTaps(state, tg, { chatId: need("TELEGRAM_CHAT_ID") })}`);
+    console.log(`phone: ${await pullPhone(state, { gist: process.env.COFRE_PHONE_GIST, key })}`);
+    console.log(`edited: ${await syncMessages(state, tg)}`);
+  } catch (e) {
+    if (!isNetworkError(e)) throw e;
+    // Nothing saved: the offset stays put, so the next run fetches the same taps again.
+    console.log(`::warning::network blip, skipped this run: ${e.cause?.code || e.code || e.message}`);
+    process.exit(0);
+  }
   if (canon(state) !== before) await save(path, state, key);
 }

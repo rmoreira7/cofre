@@ -1,9 +1,8 @@
 name: taps
 # Records Telegram button taps (✓ Feito / ⏰ Adiar / ↩ Desfazer) on the watcher's messages, every few minutes.
-# No bank calls: only Telegram and the encrypted state. GitHub may start a scheduled run some minutes late.
+# No bank calls: only Telegram and the encrypted state.
 on:
-  schedule:
-    - cron: "2-59/5 * * * *" # backup only: cron-job.org starts it every 5 min (GitHub skips most scheduled runs)
+  # Started by an external cron (cron-job.org), not by `schedule:`: GitHub skipped most scheduled runs here.
   workflow_dispatch:
 permissions:
   contents: write

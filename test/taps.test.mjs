@@ -62,3 +62,12 @@ test("old message entries are pruned after 60 days", () => {
   pruneMessages(s, "2027-02-01");
   assert.deepEqual(s.messages, {});
 });
+
+test("isNetworkError: a connection that never landed, not an API refusal", async () => {
+  const { isNetworkError } = await import("../watch/taps.mjs");
+  const blip = Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new AggregateError([Object.assign(new Error("x"), { code: "ETIMEDOUT" }), Object.assign(new Error("y"), { code: "ENETUNREACH" })]), { code: "ETIMEDOUT" }) });
+  assert.equal(isNetworkError(blip), true);
+  assert.equal(isNetworkError(Object.assign(new TypeError("fetch failed"), { cause: { code: "UND_ERR_CONNECT_TIMEOUT" } })), true);
+  assert.equal(isNetworkError(Object.assign(new Error("telegram getUpdates: Unauthorized"), { description: "Unauthorized" })), false);
+  assert.equal(isNetworkError(new Error("unseal failed")), false);
+});
