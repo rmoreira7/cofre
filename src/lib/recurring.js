@@ -26,7 +26,7 @@ function covered(desc, lists) {
 
 // rows: spendRows(). → [{ key, name, src, card, amount, day | every, match, last, n }], the most recent first.
 export function recurring(rows, { lists = {}, ignored = [], today }) {
-  return detect(rows, today).filter((r) => !ignored.includes(r.key) && !covered(r.desc, lists)).map(({ desc, cluster, ...r }) => r);
+  return detect(rows, today).filter((r) => !ignored.includes(r.key) && !covered(r.desc, lists)).map(({ desc, cluster, raise, ...r }) => r);
 }
 
 // Every charge that keeps coming back monthly, whatever list it is in (Gastos › Assinaturas).
@@ -47,11 +47,17 @@ function detect(rows, today) {
       if (monthly(g)) good++; else if (!skipped(g)) break;
       i--;
     }
-    const run = xs.slice(i);
+    let run = xs.slice(i);
     if (good < 2 || daysBetween(run.at(-1).d, today) > ACTIVE) continue;
-    const usual = median(run.map((x) => x.amt));
-    if (!run.every((x) => Math.abs(x.amt - usual) <= usual * TOLERANCE)) continue;
+    const stable = (r) => { const u = median(r.map((x) => x.amt)); return r.every((x) => Math.abs(x.amt - u) <= u * TOLERANCE); };
+    // A price raise past the tolerance still is the same charge: the run before it held, the last is up to 50 % more.
+    const before = run.slice(0, -1), jump = run.at(-1).amt / median(before.map((x) => x.amt));
+    if (!stable(run) && !(before.length >= 2 && stable(before) && jump > 1 && jump <= 1.5)) continue;
     const last = run.at(-1);
+    // Raised: a fixed price (the two charges before it equal to the cent) and the last one higher.
+    const c = (n) => Math.round(n * 100), [p2, p1] = run.slice(-3, -1).map((x) => x.amt);
+    const raise = run.length >= 3 && c(p1) === c(p2) && c(last.amt) - c(p1) >= Math.max(100, c(p1) * 0.03)
+      ? { from: p1, to: last.amt, since: last.d } : null;
     const days = run.map((x) => Number(x.d.slice(8, 10)));
     // A fixed day of the month when the charges keep to it (month ends wrap: the 30th and the 2nd are 3 days apart).
     const day = Math.round(median(days)), drift = Math.max(...days.map((d) => Math.min(Math.abs(d - day), 31 - Math.abs(d - day))));
@@ -60,7 +66,7 @@ function detect(rows, today) {
       key, name: name.toLowerCase().replace(/(^|\s)\p{L}/gu, (c) => c.toUpperCase()), src: last.src, card: last.src === "card",
       amount: Math.round(last.amt * 100) / 100, match: [name],
       ...(drift <= 4 ? { day: Math.min(28, day) } : { every: Math.round(median(run.slice(1).map((x, j) => daysBetween(run[j].d, x.d)).filter(monthly))) }),
-      last: last.d, n: run.length, desc: last.desc, cluster: last.cluster,
+      last: last.d, n: run.length, desc: last.desc, cluster: last.cluster, ...(raise && { raise }),
     });
   }
   return out.sort((a, b) => b.last.localeCompare(a.last));
@@ -90,7 +96,7 @@ export function niceName(name) {
 export function subscriptions(rows, { lists = {}, today, hidden = [] }) {
   const found = detect(rows, today);
   const hit = (desc, r) => { const p = plain(merchant(desc)), w = plain(r.name); return w.length >= 5 && p.length >= 5 && (p.includes(w) || w.includes(p)); };
-  const monthlyOut = found.map((f) => ({ key: f.key, name: niceName(f.name), amount: f.amount, per: "month", src: f.src, day: f.day ?? null, cluster: f.cluster, desc: f.desc }));
+  const monthlyOut = found.map((f) => ({ key: f.key, name: niceName(f.name), amount: f.amount, per: "month", src: f.src, day: f.day ?? null, cluster: f.cluster, desc: f.desc, ...(f.raise && { raise: f.raise }) }));
   const yearly = [];
   for (const r of lists.renewals || []) {
     const days = daysBetween(today, r.date);

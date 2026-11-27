@@ -46,3 +46,21 @@ test("names read like a person's; a hidden one leaves the totals and can come ba
   pane.onclick({ target: { closest: (sel) => (sel === "[data-show]" ? { dataset: { show: key } } : null) } });
   assert.deepEqual(saved.hiddenSubs, []);
 });
+
+test("a fixed price that goes up is a raise: a chip on the row and one Telegram warning in that cycle", async () => {
+  const { cycleWarnings, newWarnings } = await import("../src/lib/warnings.js");
+  const plan = ["2026-08-24", "2026-09-24", "2026-10-24"].map((d) => charge(d, "Socio Clube", 259.9, "card", "leis")).concat(charge("2026-11-24", "Socio Clube", 289.9, "card", "leis"));
+  const s = subscriptions(plan, { lists: {}, today });
+  assert.deepEqual(s.monthly[0].raise, { from: 259.9, to: 289.9, since: "2026-11-24" });
+  assert.match(render({ subscriptions: s }), /▲ \+R\$ 30,00 desde 24\/11/);
+  const v = { today, month: { month: "2026-12", start: "2026-11-26", daysLeft: 29, clusters: [] }, subscriptions: s };
+  assert.equal(cycleWarnings(v).items.length, 0); // charged before this cycle began
+  const w = cycleWarnings({ ...v, month: { ...v.month, start: "2026-11-20" } });
+  const [msg] = newWarnings({}, w, today);
+  assert.match(msg, /Socio Clube ficou mais caro<\/b>\nR\$ 259,90 → <b>R\$ 289,90<\/b> · \+R\$ 30,00 \(12%\)\ncobrado em 24\/11 · R\$ 360 a mais por ano/);
+  // a bill that varies a little every month is not a raise; nor is a jump past 50 %
+  const varying = [["2026-08-05", 61.2], ["2026-09-05", 69.8], ["2026-10-05", 66.4], ["2026-11-05", 72.1]].map(([d, a]) => charge(d, "Op Fatura", a, "card", "bills"));
+  assert.equal(subscriptions(varying, { lists: {}, today }).monthly.find((m) => m.raise), undefined);
+  const big = plan.slice(0, 3).concat(charge("2026-11-24", "Socio Clube", 500, "card", "leis"));
+  assert.equal(subscriptions(big, { lists: {}, today }).monthly.length, 0);
+});

@@ -1,7 +1,7 @@
 // Gastos › Assinaturas: what keeps costing every month or year, in one list, with what it adds up to in a year.
 // Found in the statements (a charge that repeats monthly) or in Ajustes › Contas (a conta or renewal with a price).
 // One tap hides what is not really a subscription (kept on this device, `hiddenSubs`); it can be brought back.
-import { brl, ddmmyyyy, esc } from "../../lib/format.js";
+import { brl, ddmm, ddmmyyyy, esc } from "../../lib/format.js";
 import { CLUSTERS } from "../../lib/spend.js";
 
 export const id = "subs";
@@ -30,7 +30,8 @@ function list(title, items) {
   if (!items.length) return "";
   const rows = items.map((s) => {
     const sub = [where(s), s.day ? `dia ${s.day}` : "", s.cluster && GROUP[s.cluster] ? GROUP[s.cluster] : "", s.renews ? `renova ${ddmmyyyy(s.renews)}` : ""].filter(Boolean).join(" · ");
-    const chip = s.days != null && s.days <= SOON ? ` <span class="chip bad">${s.days === 0 ? "renova hoje" : `em ${s.days} d`}</span>` : "";
+    const up = s.raise ? ` <span class="chip warn">▲ +${brl(s.raise.to - s.raise.from, 2)} desde ${ddmm(s.raise.since)}</span>` : "";
+    const chip = up + (s.days != null && s.days <= SOON ? ` <span class="chip bad">${s.days === 0 ? "renova hoje" : `em ${s.days} d`}</span>` : "");
     const year = s.per === "year" ? `<small>${brl(s.amount / 12)}/mês</small>` : `<small>${brl(s.amount * 12)}/ano</small>`;
     return `<div><span class="l">${esc(s.name)}${chip}<small>${sub}</small></span><span class="nw sub-amt"><b>${brl(s.amount, 2)}</b>${year}<button class="lnk muted xs" data-hide="${esc(s.key)}">ocultar</button></span></div>`;
   }).join("");
