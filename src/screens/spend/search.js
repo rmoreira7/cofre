@@ -2,13 +2,15 @@
 // cycle, this year and in the last 12 cycles, with every charge. The results redraw as you type; the field stays put.
 import { brl, ddmm, esc, MES } from "../../lib/format.js";
 import { CLUSTERS } from "../../lib/spend.js";
-import { search, merchantText } from "../../lib/search.js";
+import { search, merchantText, topStores } from "../../lib/search.js";
 
 export const id = "search";
 export const label = "Buscar";
 
 const FIRST = 30;
 let q = "", all = false;
+// Another screen's store name, tapped (data-find, handled in main.js): Buscar opens with it.
+export function setQuery(text) { q = String(text || ""); all = false; }
 const GROUP = Object.fromEntries(CLUSTERS.map((c) => [c.id, c.label]));
 const k = (n) => (n >= 1000 ? `${(n / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}k` : String(Math.round(n)));
 
@@ -20,10 +22,12 @@ export function render(t) {
     <div data-results>${results(t)}</div>`;
 }
 
+const periodsOf = (t) => [...(t.month.long || t.month.history || []).map((h) => h.month)].sort();
+
 export function results(t) {
-  if (!q.trim()) return "";
   const key = t.month.cycle ? "cyc" : "m";
-  const periods = [...(t.month.long || t.month.history || []).map((h) => h.month)].sort();
+  const periods = periodsOf(t);
+  if (!q.trim()) return rankCard(t, key, periods);
   const s = search(t.rows, q, { key, today: t.today, periods });
   if (!s || !s.rows.length) return `<div class="card empty"><b>Nada encontrado</b>Nenhum gasto com “${esc(q.trim())}”.</div>`;
   const max = Math.max(1, ...s.periods.map((p) => s.byPeriod[p] || 0));
@@ -53,4 +57,19 @@ export function bind(pane, t) {
   pane.onclick = (e) => {
     if (e.target.closest('[data-a="all-hits"]')) { all = true; out.innerHTML = results(t); }
   };
+}
+
+function rankCard(t, key, periods) {
+  const top = topStores(t.rows, { key, today: t.today, periods });
+  if (!top.length) return "";
+  const rows = top.map((x, i) => {
+    const d = x.prev != null && x.prev > 0 ? x.total - x.prev : null;
+    const gap = d != null && Math.abs(d) >= Math.max(100, x.prev * 0.2) ? ` <span class="sm ${d > 0 ? "bad" : "ok"}">${d > 0 ? "▲" : "▼"} ${Math.round((d / x.prev) * 100)}%</span>` : "";
+    return `<div><span class="l"><span class="find" data-find="${esc(x.name)}">${i + 1}. ${esc(x.name)}</span><small>${x.n} ${x.n === 1 ? "compra" : "compras"} · ${esc(GROUP[x.cluster] || "Outros")} · ≈ ${brl(x.perMonth)}/mês</small></span><span class="nw"><b>${brl(x.total)}</b>${gap}</span></div>`;
+  }).join("");
+  return `<div class="card">
+      <div class="row"><div class="label">Onde mais gastou</div><span class="muted sm">${t.month.cycle ? "últimos 12 ciclos" : "últimos 12 meses"}</span></div>
+      <div class="list mt6">${rows}</div>
+      <div class="muted xs mt6">Toque numa loja para ver cada compra. ▲▼ vs. os 12 anteriores, quando a loja é só no cartão (antes disso só há o extrato do cartão).</div>
+    </div>`;
 }

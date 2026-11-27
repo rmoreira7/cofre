@@ -33,7 +33,7 @@ function list(title, items) {
     const up = s.raise ? ` <span class="chip warn">▲ +${brl(s.raise.to - s.raise.from, 2)} desde ${ddmm(s.raise.since)}</span>` : "";
     const chip = up + (s.days != null && s.days <= SOON ? ` <span class="chip bad">${s.days === 0 ? "renova hoje" : `em ${s.days} d`}</span>` : "");
     const year = s.per === "year" ? `<small>${brl(s.amount / 12)}/mês</small>` : `<small>${brl(s.amount * 12)}/ano</small>`;
-    return `<div><span class="l">${esc(s.name)}${chip}<small>${sub}</small></span><span class="nw sub-amt"><b>${brl(s.amount, 2)}</b>${year}<button class="lnk muted xs" data-hide="${esc(s.key)}">ocultar</button></span></div>`;
+    return `<div><span class="l"><span><span class="find" data-find="${esc(s.name)}">${esc(s.name)}</span>${chip}</span><small>${sub}</small></span><span class="nw sub-amt"><b>${brl(s.amount, 2)}</b>${year}<button class="lnk muted xs" data-hide="${esc(s.key)}">ocultar</button></span></div>`;
   }).join("");
   return `<div class="sec">${title}</div><div class="card"><div class="list">${rows}</div></div>`;
 }

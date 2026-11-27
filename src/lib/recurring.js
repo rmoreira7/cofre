@@ -77,21 +77,30 @@ function detect(rows, today) {
 // that is a found charge lends it its date. Hidden (keys tapped away on the screen) are listed apart, out of the totals.
 // → { monthly: [...], yearly: [...], hidden: [...], perMonth, perYear }; each item
 // { key, name, amount, per: "month" | "year", src: "card" | "account" | "list", day?, renews?, days?, cluster? }.
-// A statement merchant as a person would name it: "Op P*fatura Op" → "Op", "Milhas Clube Milhas" → "Clube
-// Milhas", "Google Youtube" → "YouTube". A word that comes back later moves there; a payment processor's prefix
-// ("P*", "Pg *") and billing words go; a few brands get their own spelling.
-const BILLING = new Set(["fatura", "pagamento", "pgto", "assinatura", "mensalidade", "recorrente"]);
-const BRAND = { youtube: "YouTube", ifood: "iFood", iphone: "iPhone", icloud: "iCloud", hbo: "HBO", tv: "TV", xp: "XP" };
-export function niceName(name) {
-  let w = String(name || "").replace(/\b[a-z]{1,4}\s?\*\s?/gi, "").split(/\s+/).filter(Boolean);
+// A statement merchant as a person would name it: "Op P*fatura Op" → "Op", "Milhas Clube Milhas" → "Clube Milhas",
+// "Mp *Loja" → "Loja", "Uber *Trip" → "Uber", "Estorno de Loja - NuPay" → "Loja", "Google Youtube" → "YouTube".
+// Before a "*" is the store, unless it is a payment processor's code (then the store comes after it). A word that
+// comes back later moves there; one-letter and billing words go; a few brands get their own spelling.
+const PROC = new Set(["mp", "dm", "mep", "ebw", "ebn", "zig", "ifd", "pg", "pag", "pags", "pagseguro", "cappta", "jim.com", "izi", "iz", "ec", "dl", "sumup", "stone", "pagar.me", "paypal", "mercadopago", "ppro", "emv", "pix"]);
+const BILLING = new Set(["fatura", "credit", "pagamento", "pgto", "pgt", "assinatura", "mensalidade", "recorrente"]);
+const BRAND = { youtube: "YouTube", ifood: "iFood", iphone: "iPhone", icloud: "iCloud", hbo: "HBO", tv: "TV", xp: "XP", mercadolivre: "Mercado Livre", amazonmktplc: "Amazon" };
+const title = (x) => (x === x.toUpperCase() || x === x.toLowerCase() ? x.charAt(0).toUpperCase() + x.slice(1).toLowerCase() : x);
+export function niceName(desc) {
+  let t = String(desc || "").split("|").at(-1).trim()
+    .replace(/^(IOF de volta de|Estorno de|Crédito de)\s*/i, "").replace(/^"(.*)"$/, "$1").replace(/\s*-\s*NuPay\s*$/i, "")
+    .replace(/\s*-?\s*parcela\s*\d+\/\d+\s*$/i, "").replace(/\s\d{1,2}\/\d{1,2}\s*$/, "").split(/\s{3,}/)[0].replace(/_/g, " ").trim();
+  const star = t.match(/^([^*]*)\*\s*(.*)$/);
+  if (star) { const pre = star[1].trim(), post = star[2].trim(); t = !pre || PROC.has(pre.toLowerCase()) ? post || pre : pre; }
+  let w = t.split(/\s+/).filter(Boolean);
   while (w.length > 1 && w.slice(1).some((x) => x.toLowerCase() === w[0].toLowerCase())) w.shift();
   w = w.filter((x, i, a) => a.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i);
-  const kept = w.filter((x) => !BILLING.has(x.toLowerCase()));
+  const kept = w.filter((x) => !BILLING.has(x.toLowerCase()) && !(x.length === 1 && /[a-z]/i.test(x)));
   if (kept.length) w = kept;
   if (w.length > 1 && w[0].toLowerCase() === "google" && w[1].toLowerCase() === "youtube") w.shift();
-  const out = w.map((x) => BRAND[x.toLowerCase()] || x).join(" ");
-  return out || String(name || "");
+  const out = w.map((x) => BRAND[x.toLowerCase()] || title(x)).join(" ");
+  return out || String(desc || "").trim();
 }
+export const storeKey = (desc) => plain(niceName(desc));
 
 export function subscriptions(rows, { lists = {}, today, hidden = [] }) {
   const found = detect(rows, today);

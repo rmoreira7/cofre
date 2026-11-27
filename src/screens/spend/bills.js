@@ -90,7 +90,7 @@ function linesCard(m, all) {
       <div class="list mt6">${rows.map((r) => {
         const last = r.n && r.of && r.n === r.of;
         const when = r.date ? `compra ${ddmm(r.date)}` : "";
-        return `<div><span class="l">${esc(r.name)}<small>${when}${last ? " · última" : r.of ? "" : " · à vista"}</small></span><span class="nw">${r.of ? `<span class="pl">${r.n}/${r.of}</span> ` : ""}<b>${brl(r.amount, 2)}</b></span></div>`;
+        return `<div><span class="l"><span class="find" data-find="${esc(r.name)}">${esc(r.name)}</span><small>${when}${last ? " · última" : r.of ? "" : " · à vista"}</small></span><span class="nw">${r.of ? `<span class="pl">${r.n}/${r.of}</span> ` : ""}<b>${brl(r.amount, 2)}</b></span></div>`;
       }).join("")}</div>
       ${m.rows.length > rows.length ? `<button class="lnk mt6" data-a="all-lines">mostrar todas (${m.rows.length}) ›</button>` : ""}
     </div>`;

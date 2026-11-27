@@ -3,6 +3,7 @@
 import { brl, ddmm, esc, MES } from "../../lib/format.js";
 import { CLUSTERS } from "../../lib/spend.js";
 import { kBRL } from "./common.js";
+import { niceName } from "../../lib/recurring.js";
 
 export const id = "history";
 export const label = "Histórico";
@@ -85,7 +86,7 @@ function purchasesCard(t, p) {
   const rows = all ? buys : buys.slice(0, FIRST);
   return `<div class="card">
       <div class="row"><div class="label">Maiores gastos</div><span class="muted sm">${buys.length} lançamentos</span></div>
-      <div class="list mt6">${rows.map((r) => `<div><span class="l">${esc(String(r.desc || "").split("|").at(-1).trim() || "—")}<small>${ddmm(r.d)} · ${esc(GROUP[r.cluster] || "Outros")}${r.src === "account" ? " · conta" : ""}</small></span><b class="nw">${brl(r.amt, 2)}</b></div>`).join("")}</div>
+      <div class="list mt6">${rows.map((r) => `<div><span class="l"><span class="find" data-find="${esc(niceName(r.desc))}">${esc(String(r.desc || "").split("|").at(-1).trim() || "—")}</span><small>${ddmm(r.d)} · ${esc(GROUP[r.cluster] || "Outros")}${r.src === "account" ? " · conta" : ""}</small></span><b class="nw">${brl(r.amt, 2)}</b></div>`).join("")}</div>
       ${buys.length > rows.length ? `<button class="lnk mt6" data-a="all-buys">mostrar todos (${buys.length}) ›</button>` : ""}
     </div>`;
 }

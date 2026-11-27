@@ -35,5 +35,5 @@ test("Buscar redraws only the results as you type", () => {
   pane.oninput({ target: { matches: () => true, value: "zzz" } });
   assert.match(out.innerHTML, /Nada encontrado/);
   pane.oninput({ target: { matches: () => true, value: "" } });
-  assert.equal(results(t), "");
+  assert.match(results(t), /Onde mais gastou/); // nothing typed: the ranking
 });

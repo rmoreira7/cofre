@@ -19,7 +19,7 @@ test("found charges, a renewal with no charge (yearly) and a conta paid by bolet
   assert.equal(Math.round(s.perMonth * 100) / 100, 100 + 100 + 39.9 + 100);
   assert.equal(Math.round(s.perYear), Math.round((339.9) * 12));
   const html = render({ subscriptions: s });
-  assert.match(html, /Seguro Anual <span class="chip bad">em 23 d<\/span>/);
+  assert.match(html, /Seguro Anual<\/span> <span class="chip bad">em 23 d<\/span>/);
   assert.match(html, /Todo ano/);
 });
 
