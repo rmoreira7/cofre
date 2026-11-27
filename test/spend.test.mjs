@@ -103,12 +103,13 @@ test("bill history: one source per cycle, statement refunds net, 24-month card-o
     ["Grand Hotel", "2026-09", 900, true],
     ["Restaurant", "2026-10", 100, true],
     ['Crédito de "GRAND HOTEL"', "2026-10", -800, true],
+    ["Desconto Antecipação Shop", "2026-10", -5, true], // paying early: the discount lowers the cost
     ["Pix A", "2026-11", 30, false],
   ]);
   assert.equal(rows.find((r) => r.amt === -800).cat, "Accomodation");
   const v = monthView(rows, { today: "2026-11-23", cycles });
   assert.equal(v.long.length, 24);
-  assert.deepEqual(v.long.slice(-3).map((h) => [h.month, h.spent, h.cardOnly ?? false]), [["2026-09", 900, true], ["2026-10", -700, true], ["2026-11", 70, false]]);
+  assert.deepEqual(v.long.slice(-3).map((h) => [h.month, h.spent, h.cardOnly ?? false]), [["2026-09", 900, true], ["2026-10", -705, true], ["2026-11", 70, false]]);
   assert.deepEqual(v.yearAgo, null);
   assert.equal(monthView(rows.filter((r) => !r.hist), { today: "2026-11-23", cycles }).long, null);
 });

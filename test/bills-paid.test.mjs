@@ -104,3 +104,23 @@ test("spendRows: an installment already on the open bill counts in this cycle be
   const ahead = rows.filter((x) => x.ahead);
   assert.deepEqual(ahead.map((x) => [x.d, x.cyc]), [["2026-12-06", "2026-12"]]);
 });
+
+test("points used on the bill are income; an early-payment discount nets against the installments brought forward", async () => {
+  const { incomeRows, cardCycles } = await import("../src/lib/spend.js");
+  const r = { ...rules, primary: "me" };
+  const s = snap();
+  const meta = (f, n) => ({ billForecastDate: `${f}-03`, paymentType: "INSTALLMENT", installmentNumber: n, totalInstallments: 4, purchaseDate: "2026-09-01" });
+  s.items[0].accounts[1].transactions.push(
+    { id: "aj", date: "2026-11-04T12:00:00Z", amount: -50, description: "Ajuste a crédito", category: "Income", card: { billForecastDate: "2026-12-03" } },
+    { id: "q3", date: "2026-11-10T12:00:00Z", amount: 100, description: "Aerolinea Teste 3/4", category: "Airport and airlines", card: meta("2026-12", 3) },
+    { id: "q4", date: "2026-11-10T12:00:00Z", amount: 100, description: "Aerolinea Teste 4/4", category: "Airport and airlines", card: meta("2026-12", 4) },
+    { id: "ds", date: "2026-11-10T12:00:00Z", amount: -7.5, description: "Desconto Antecipação ", category: "Income", card: { billForecastDate: "2026-12-03" } });
+  const compiled = compileRules(r, {});
+  const cycles = cardCycles(s, { rules: r, entity: "me" });
+  const inc = incomeRows(s, { rules: r, compiled, entity: "me", today: "2026-11-27", cycles });
+  assert.deepEqual(inc.filter((x) => x.kind === "points").map((x) => [x.amt, x.cyc]), [[50, "2026-11"]]);
+  const rows = spendRows(s, { rules: r, compiled, entity: "me", today: "2026-11-27", cycles });
+  const disc = rows.find((x) => x.amt === -7.5);
+  assert.equal(disc.cluster, "travel");
+  assert.ok(!rows.some((x) => /ajuste/i.test(x.desc)));
+});

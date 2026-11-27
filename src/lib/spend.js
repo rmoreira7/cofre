@@ -72,6 +72,11 @@ export function cycleBounds(label, cycles) {
   return { start, end };
 }
 
+const merchantKey = (d) => String(d || "").split("|").at(-1).replace(/\s*-\s*parcela\s*\d+\/\d+\s*$/i, "").replace(/\s*\d+\/\d+\s*$/, "").replace(/\s*-\s*NuPay\s*$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+export const DISCOUNT = /^Desconto Antecipa[cç][aã]o\s*/i;
+// Card reward points used to pay part of the bill: money the owner did not have to put in, so income.
+export const POINTS = /^Ajuste a cr[eé]dito\b/i;
+
 export function spendRows(pulled, { rules, compiled, entity, today, cycles = null }) {
   const items = pulled.items.filter((it) => !it.error && entityOf(it.label, rules) === entity);
   const card = [], bank = [], refunds = new Map(), histBank = new Set();
@@ -91,6 +96,8 @@ export function spendRows(pulled, { rules, compiled, entity, today, cycles = nul
   const histRefunds = refundMatches(hist);
   for (const [r, o] of histRefunds) refunds.set(r, o);
   const learned = { ...rules.learned, ...learn([...card, ...bank].map((x) => [x.description, x.category ?? null])) };
+  const sameDay = new Map();
+  for (const x of card) if (x.amount > 0 && (x.creditCardMetadata || x.card)?.paymentType === "INSTALLMENT") { const d = x.date.slice(0, 10); if (!sameDay.has(d)) sameDay.set(d, []); sameDay.get(d).push(x); }
   const cat = (src, x) => categorize({ src, op: x.operationType, desc: x.description, pluggy: x.category ?? null }, compiled, learned, entity);
 
   const rows = [];
@@ -108,7 +115,18 @@ export function spendRows(pulled, { rules, compiled, entity, today, cycles = nul
     }
     if (x.cyc && !cycles && d >= firstPluggy) continue;
     if (x.amount > 0) rows.push(row(d, x.amount, cat("card", x), "card", x, cycles));
-    else if (refunds.has(x)) {
+    else if (DISCOUNT.test(x.description || "")) {
+      // Paying installments early: the discount lowers what those purchases cost, in their category. The statements
+      // name the purchase; Pluggy does not, so it takes the installments brought forward that day (or up to 3 before).
+      const named = String(x.description).replace(DISCOUNT, "").trim();
+      // The discount can post a day or two after the installments it belongs to.
+      const near = named ? [] : [0, 1, 2, 3].map((k) => sameDay.get(addDays(d, -k)) || []).find((xs) => xs.length) || [];
+      const orig = [...near].sort((a, b) => b.amount - a.amount)[0];
+      const c = orig ? cat("card", orig) : named ? cat("card", { ...x, description: named, category: null }) : "Uncategorized";
+      const r = row(d, x.amount, c, "card", x, cycles);
+      if (named && c === "Uncategorized") r._named = named;
+      rows.push(r);
+    } else if (refunds.has(x)) {
       const orig = refunds.get(x);
       const c = orig ? cat("card", orig) : /^IOF/i.test(x.description) ? "Tax on financial operations" : cat("card", { ...x, description: refundTarget(x.description), category: null });
       rows.push(row(d, x.amount, c, "card", x, cycles));
@@ -127,6 +145,15 @@ export function spendRows(pulled, { rules, compiled, entity, today, cycles = nul
     // Paying one of his own cards from an account: the card's charges are already counted, one by one.
     if (ownCards.some((bk) => isCardPayment(x, bk))) continue;
     rows.push(row(d, -x.amount, c, "account", x, cycles));
+  }
+  // A statement discount whose merchant the rules do not know: the category of that merchant's own purchases.
+  const byMerchant = new Map();
+  for (const r of rows) if (r.amt > 0 && r.cat !== "Uncategorized") byMerchant.set(merchantKey(r.desc), r.cat);
+  for (const r of rows) {
+    if (!r._named) continue;
+    const c = byMerchant.get(merchantKey(r._named));
+    if (c) { r.cat = c; r.cluster = clusterOf(c); }
+    delete r._named;
   }
   for (const r of rows) delete r._x;
   return rows;
@@ -160,6 +187,16 @@ export function incomeRows(pulled, { rules, compiled, entity, today, cycles = nu
     const r = { d, m: d.slice(0, 7), amt: x.amount, kind, from: x.from || null, desc: x.description };
     if (cycles) r.cyc = cycleOf(d, cycles);
     rows.push(r);
+  }
+  for (const it of items) for (const a of it.accounts) {
+    if (a.type !== "CREDIT") continue;
+    for (const x of a.transactions) {
+      const d = x.date.slice(0, 10);
+      if (!(x.amount < 0) || d > today || !POINTS.test(x.description || "")) continue;
+      const r = { d, m: d.slice(0, 7), amt: -x.amount, kind: "points", from: null, desc: "Pontos usados na fatura" };
+      if (cycles) { const f = (x.creditCardMetadata || x.card)?.billForecastDate?.slice(0, 7); r.cyc = f ? addMonths(f, -1) : cycleOf(d, cycles); }
+      rows.push(r);
+    }
   }
   return rows;
 }
