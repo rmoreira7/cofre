@@ -1,6 +1,6 @@
 // Caches the app shell only. API calls (api.pluggy.ai) are never cached here:
 // the data lives encrypted in IndexedDB, not in the HTTP cache.
-const CACHE = "cofre-0.40.0";
+const CACHE = "cofre-0.40.1";
 const SHELL = [
   "./", "index.html", "oauth.html", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png",
   "icons/icon-512.png", "src/app.css", "src/tokens.css", "src/lib/agenda.js", "src/lib/bio.js",
@@ -24,12 +24,14 @@ const SHELL = [
   "src/ui/shell.js", "src/ui/tabbed.js",
 ];
 
-self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())));
+// cache: "reload" — straight from the network: Pages lets the browser keep files 10 minutes, and a new version must not
+// install the previous version's files.
+self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting())));
 self.addEventListener("activate", (e) =>
   e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())),
 );
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
-  if (e.request.method !== "GET" || url.origin !== self.location.origin) return;
+  if (e.request.method !== "GET" || url.origin !== self.location.origin || url.pathname.endsWith("/sw.js")) return;
   e.respondWith(caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || fetch(e.request)));
 });

@@ -21,3 +21,14 @@ test("the cache name carries the app version", () => {
   const v = readFileSync("src/main.js", "utf8").match(/APP_VERSION = "([^"]+)"/)[1];
   assert.match(sw, new RegExp(`const CACHE = "cofre-${v.replace(/\./g, "\\.")}"`));
 });
+
+test("the update check reads the served version from sw.js, and new versions install from the network", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { servedVersion } = await import("../src/screens/settings/about.js");
+  const sw = readFileSync(new URL("../sw.js", import.meta.url), "utf8");
+  assert.match(servedVersion(sw), /^\d+\.\d+\.\d+$/);
+  assert.equal(servedVersion(sw), readFileSync(new URL("../src/main.js", import.meta.url), "utf8").match(/APP_VERSION = "([^"]+)"/)[1]);
+  assert.equal(servedVersion("nothing"), null);
+  assert.match(sw, /new Request\(u, \{ cache: "reload" \}\)/);
+  assert.match(sw, /pathname\.endsWith\("\/sw\.js"\)/);
+});
