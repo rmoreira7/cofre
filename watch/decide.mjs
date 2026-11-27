@@ -40,32 +40,35 @@ export function decide(v, { today, monday = new Date(today + "T12:00:00Z").getUT
     urgent.push({ id: d.id, d, text: text(d), ...(d.kind === "maturity" && { facts: maturityFacts(d, lad.plan.find((x) => x.due === d.due), lad, cdiDaily) }) });
   }
   if (monday) {
-    for (const r of v.mat.rows) if (r.days > 7 && r.days <= 30) weekly.push(`📅 ${esc(r.issuer)} ${brl(r.balance)} vence ${ddmm(r.due)}${joint(r)}`);
+    for (const r of v.mat.rows) if (r.days > 7 && r.days <= 30) weekly.push({ sec: "mat", line: `• ${esc(r.issuer)} <b>${brl(r.balance)}</b> · ${ddmm(r.due)}${joint(r)}` });
     for (const s of v.status) {
-      if (!s.ok) weekly.push(`⚠️ ${esc(s.name)}: sincronização falhou (${esc(s.error || s.status || "?")})`);
-      else if (s.consent && daysBetween(today, s.consent) <= CONSENT_DAYS) weekly.push(`🔑 ${esc(s.name)}: consentimento expira ${ddmm(s.consent)}`);
+      if (!s.ok) weekly.push({ sec: "bank", line: `⚠️ ${esc(s.name)}: sincronização falhou (${esc(s.error || s.status || "?")})` });
+      else if (s.consent && daysBetween(today, s.consent) <= CONSENT_DAYS) weekly.push({ sec: "bank", line: `🔑 ${esc(s.name)}: consentimento expira ${ddmm(s.consent)}` });
     }
   }
   return { urgent, weekly, monday };
 }
 
+// One fact per line, like the Fechamento: a bold title, then the amount and the date, then what to do.
 function text(d) {
+  const L = [];
   if (d.kind === "maturity") {
-    let s = `💰 <b>${esc(d.issuer)}${d.n > 1 ? ` ×${d.n}` : ""}</b> ${brl(d.amount)} ${when(d.days)} (${ddmm(d.due)})${joint(d)}`;
-    if (d.earn) s += `\n   ${earnText(d.earn)}`;
-    if (d.brb) s += `\n   BRB: não renovar.`;
-    if (d.suggestion) s += `\n   Sugestão da escada: ${d.suggestion.map((b) => `${brl(b.amount)} em ${b.term}`).join(" · ")}`;
-    return s + `\n   Mínimo ${d.cdbMin}% CDI (CDB) · outro emissor se houver concentração.`;
-  }
-  if (d.kind === "bill") return `🧾 <b>Fatura ${esc(d.name)}</b> ${brl(d.amount)} ${when(d.days)} (${ddmm(d.due)})`;
-  if (d.kind === "monthly") return `📱 <b>${esc(d.name)}</b>${d.amount != null ? ` ~${brl(d.amount, 2)}` : ""} ${when(d.days)} (${ddmm(d.due)})${d.detail ? `\n   ${esc(d.detail)}` : ""}`;
-  if (d.kind === "renewal") {
-    const price = d.amount ? ` · ${brl(d.amount, 2)}${d.every === "month" ? "/mês" : d.every === "year" ? "/ano" : ""}` : "";
-    return `🔁 <b>${esc(d.name)}</b> ${d.days === 0 ? "renova hoje" : d.days === 1 ? "renova amanhã" : `renova em ${d.days} dias`} (${ddmm(d.due)})${price}${d.detail ? `\n   ${esc(d.detail)}` : ""}`;
-  }
-  if (d.kind === "idle") return `🏦 <b>${esc(d.name)}</b>: ${brl(d.detail.balance)} parado na conta${joint(d)}${d.cost ? ` · ~${money(d.cost)} por dia útil` : ""}\n   Investir ${brl(d.amount)} (reserva de ${brl(d.detail.reserve)})`;
-  if (d.kind === "fgc") return `🛡️ <b>FGC</b>: ${esc(d.issuer)} ${brl(d.detail.total)}, ${brl(d.amount)} acima do limite${joint(d)}`;
-  return esc(d.title);
+    L.push(`💰 <b>${esc(d.issuer)}${d.n > 1 ? ` ×${d.n}` : ""}</b>`, `<b>${brl(d.amount)}</b> · ${when(d.days)} (${ddmm(d.due)})${joint(d)}`);
+    if (d.earn) L.push(earnText(d.earn));
+    if (d.brb) L.push("⛔ BRB: não renovar");
+    if (d.suggestion?.length) L.push("", "<b>Sugestão da escada</b>", ...d.suggestion.map((b) => `• ${brl(b.amount)} em ${b.term}`));
+    L.push("", `<i>Mínimo ${d.cdbMin}% CDI (CDB) · outro emissor se houver concentração</i>`);
+  } else if (d.kind === "bill") L.push(`🧾 <b>Fatura ${esc(d.name)}</b>`, `<b>${brl(d.amount)}</b> · ${when(d.days)} (${ddmm(d.due)})`);
+  else if (d.kind === "monthly") L.push(`📱 <b>${esc(d.name)}</b>`, `${d.amount != null ? `~<b>${brl(d.amount, 2)}</b> · ` : ""}${when(d.days)} (${ddmm(d.due)})`, ...(d.detail ? [esc(d.detail)] : []));
+  else if (d.kind === "renewal") {
+    const price = d.amount ? ` · <b>${brl(d.amount, 2)}</b>${d.every === "month" ? "/mês" : d.every === "year" ? "/ano" : ""}` : "";
+    L.push(`🔁 <b>${esc(d.name)}</b>`, `${d.days === 0 ? "renova hoje" : d.days === 1 ? "renova amanhã" : `renova em ${d.days} dias`} (${ddmm(d.due)})${price}`, ...(d.detail ? [esc(d.detail)] : []));
+  } else if (d.kind === "idle") {
+    L.push(`🏦 <b>${esc(d.name)}</b>${joint(d)}`, `<b>${brl(d.detail.balance)}</b> parado na conta`, `➡️ Investir <b>${brl(d.amount)}</b> (reserva de ${brl(d.detail.reserve)})`);
+    if (d.cost) L.push(`<i>~${money(d.cost)} por dia útil sem aplicar</i>`);
+  } else if (d.kind === "fgc") L.push(`🛡️ <b>FGC · ${esc(d.issuer)}</b>${joint(d)}`, `<b>${brl(d.detail.total)}</b> no emissor, ${brl(d.amount)} acima do limite`);
+  else L.push(esc(d.title));
+  return L.join("\n");
 }
 
 const pct = (x) => `${(x * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
@@ -91,11 +94,17 @@ export function maturityFacts(d, p, lad, cdiDaily) {
 }
 
 // A decision's message: its text, the explanation under it when there is one.
-export const decisionText = (u) => (u.why ? `${u.text}\n   💬 <i>${esc(u.why)}</i>` : u.text);
+export const decisionText = (u) => (u.why ? `${u.text}\n\n💬 <i>${esc(u.why)}</i>` : u.text);
 
 // The Monday digest (null on other days): what is coming but not urgent, and the connections' health.
+const WEEK_SECS = [["mat", "Vencem nos próximos 30 dias"], ["bank", "Conexões"]];
 export function digest({ weekly, monday, urgent }, today) {
   if (!monday) return null;
-  return `<b>Cofre · semana de ${ddmm(today)}</b>\n\n${weekly.length ? weekly.join("\n") : urgent.length ? "Fora as decisões acima, nada pendente." : "✅ Semana sem pendências."}`;
+  const L = [`📅 <b>Cofre · semana de ${ddmm(today)}</b>`];
+  for (const [sec, title] of WEEK_SECS) {
+    const lines = weekly.filter((w) => w.sec === sec).map((w) => w.line);
+    if (lines.length) L.push("", `<b>${title}</b>`, ...lines);
+  }
+  if (!weekly.length) L.push("", urgent.length ? "Fora as decisões acima, nada pendente." : "✅ Semana sem pendências.");
+  return L.join("\n");
 }
-

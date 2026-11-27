@@ -19,7 +19,7 @@ test("a maturity speaks only on D-7/3/1/0", () => {
 test("the maturity carries the ladder's split, the BRB rule and the joint tag", () => {
   const d = decide(view({ rows: [mat(7, 2800, { issuer: "BRB", tag: "brb", joint: true }), mat(600, 5000)] }), { today });
   assert.match(d.urgent[0].text, /BRB: não renovar/);
-  assert.match(d.urgent[0].text, /Sugestão da escada: /);
+  assert.match(d.urgent[0].text, /<b>Sugestão da escada<\/b>\n• R\$ /);
   assert.match(d.urgent[0].text, /conta conjunta/);
   assert.equal(d.urgent[0].facts["observação"], "o valor não volta para o BRB");
 });
@@ -44,17 +44,17 @@ test("idle cash and FGC excess speak on Mondays, with buttons' ids; a quiet Tues
   assert.equal(digest(tue, today), null);
   const mon = decide({ ...v, today: "2026-11-23" }, { today: "2026-11-23", cdiDaily: 0.05 });
   assert.equal(mon.urgent[0].id, "idle:bank_j");
-  assert.match(mon.urgent[0].text, /R\$ 9\.000 parado na conta · conta conjunta · ~R\$ 4,50 por dia útil/);
-  assert.match(mon.urgent[0].text, /Investir R\$ 4\.000/);
+  assert.match(mon.urgent[0].text, /Banco J<\/b> · conta conjunta\n<b>R\$ 9\.000<\/b> parado na conta\n.*\n<i>~R\$ 4,50 por dia útil/);
+  assert.match(mon.urgent[0].text, /Investir <b>R\$ 4\.000<\/b>/);
   assert.match(digest(mon, "2026-11-23"), /Fora as decisões acima, nada pendente/);
 });
 
 test("Monday digest: maturities 8–30 days out, broken banks and expiring consents", () => {
   assert.match(digest(decide(view(), { today: "2026-11-23" }), "2026-11-23"), /Semana sem pendências/);
   const v = { ...view({ rows: [mat(20, 1000)] }), status: [{ name: "Banco N", ok: false, error: "LOGIN_ERROR" }, { name: "Banco W", ok: true, consent: "2026-12-10" }] };
-  const w = decide(v, { today: "2026-11-23" }).weekly.join("\n");
-  assert.match(w, /Emissor A R\$ 1\.000 vence/);
-  assert.match(w, /Banco N: sincronização falhou \(LOGIN_ERROR\)/);
+  const w = digest(decide(v, { today: "2026-11-23" }), "2026-11-23");
+  assert.match(w, /Vencem nos próximos 30 dias<\/b>\n• Emissor A <b>R\$ 1\.000<\/b> · \d\d\/12/);
+  assert.match(w, /<b>Conexões<\/b>\n⚠️ Banco N: sincronização falhou \(LOGIN_ERROR\)/);
   assert.match(w, /Banco W: consentimento expira 10\/12/);
 });
 
@@ -62,7 +62,7 @@ test("renewals speak at D-30/7/1/0 with price and note", () => {
   const renewals = [{ name: "Plano X", date: "2026-12-24", amount: 25, every: "month", note: "cancelar antes se não quiser" }, { name: "Plano Y", date: "2026-12-10", amount: 100, every: "year" }];
   const d = decide(view(), { today, renewals });
   assert.equal(d.urgent.length, 1);
-  assert.match(d.urgent[0].text, /Plano X<\/b> renova em 30 dias \(24\/12\) · R\$ 25,00\/mês\n   cancelar antes/);
+  assert.match(d.urgent[0].text, /Plano X<\/b>\nrenova em 30 dias \(24\/12\) · <b>R\$ 25,00<\/b>\/mês\ncancelar antes/);
 });
 
 test("quiet(id) silences a decision the owner already took or snoozed", () => {
@@ -121,14 +121,14 @@ test("explain drops a reply with an invented number, and never throws", async ()
 });
 
 test("decisionText puts the explanation under its decision, escaped", () => {
-  assert.match(decisionText({ text: "💰 X", why: "a < b" }), /💬 <i>a &lt; b<\/i>/);
+  assert.match(decisionText({ text: "💰 X", why: "a < b" }), /\n\n💬 <i>a &lt; b<\/i>/);
 });
 
 test("monthly bills speak 5 days and 1 day before, and not once the charge is there", () => {
   const monthly = [{ name: "Conta A", day: 10, amount: 69.5, match: ["Pgt*Conta A"], note: "no cartão" }];
   const at = (t, snapshot = { items: [] }) => decide(view(), { today: t, monthly, snapshot }).urgent.filter((u) => u.d.kind === "monthly");
   assert.equal(at("2026-12-05").length, 1);
-  assert.match(at("2026-12-05")[0].text, /Conta A<\/b> ~R\$ 69,50 .*\(10\/12\)\n   no cartão/);
+  assert.match(at("2026-12-05")[0].text, /Conta A<\/b>\n~<b>R\$ 69,50<\/b> .*\(10\/12\)\nno cartão/);
   assert.equal(at("2026-12-09").length, 1);
   assert.equal(at("2026-12-07").length, 0);
   const paid = { items: [{ label: "x", accounts: [{ transactions: [{ date: "2026-12-04T10:00:00Z", description: "Pgt*Conta A", amount: 69.5 }] }] }] };

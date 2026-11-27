@@ -17,6 +17,7 @@ import { load, save, EMPTY } from "./state.mjs";
 import { applyTaps, syncMessages, buttons, pruneMessages, sig } from "./taps.mjs";
 import { pullPhone } from "./phone.mjs";
 import { closingText } from "../src/lib/closing.js";
+import { newWarnings } from "../src/lib/warnings.js";
 
 const need = (k) => process.env[k] || (console.error(`missing ${k}`), process.exit(2));
 const dry = process.env.DRY_RUN === "1";
@@ -128,8 +129,11 @@ console.log(`decisions: ${d.urgent.length} due, ${reports.length} reports, ${d.w
 const week = digest(d, today);
 // The month-end summary from the phone, once per period (state.closing.sent).
 const close = state.closing && !state.closing.sent ? closingText(state.closing) : null;
+// Mid-cycle warnings from the phone, each once per cycle (state.warned).
+const warns = withState && state.warnings ? newWarnings(state, state.warnings, today) : [];
+console.log(`warnings: ${warns.length}`);
 if (dry) {
-  for (const t of [...reports, ...d.urgent.map(decisionText), ...(week ? [week] : []), ...(close ? [close] : [])]) console.log("\n" + t);
+  for (const t of [...reports, ...d.urgent.map(decisionText), ...(week ? [week] : []), ...(close ? [close] : []), ...warns]) console.log("\n" + t);
 } else {
   for (const t of reports) await tg.send(t);
   for (const u of d.urgent) {
@@ -140,6 +144,7 @@ if (dry) {
   }
   if (week) await tg.send(week);
   if (close) { await tg.send(close); state.closing.sent = true; }
+  for (const t of warns) await tg.send(t);
   console.log("sent");
 }
 if (withState && !dry) { pruneMessages(state, today); await save(statePath, state, stateKey); }

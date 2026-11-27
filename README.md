@@ -22,7 +22,8 @@ DENYLIST=/path/outside/repo/denylist.txt scripts/install-hooks.sh
 `watch/` runs once a day from `.github/workflows/watch.yml` (08:00 BRT). It pulls Pluggy with the same `src/lib`
 the app uses and sends the decisions that are due to a private Telegram chat: maturities at D-7/3/1/0 with the
 ladder's split, card bills at D-3/1, renewals (subscriptions, annual plans) at D-30/7/1/0, and a Monday digest (idle cash with its cost
-per business day, FGC, failed banks, expiring consents). The renewal list is a private Actions secret (`COFRE_RENEWALS`)
+per business day, FGC, failed banks, expiring consents). Mid-cycle warnings (a group past its limit, the target passed, spending well
+above the usual pace) are built on the phone (`src/lib/warnings.js`) and sent once each per cycle. The renewal list is a private Actions secret (`COFRE_RENEWALS`)
 and a `renewals` list in the rules file, never in this repository.
 
 Each decision is its own Telegram message with **✓ Feito / ⏰ Adiar** buttons (then **↩ Desfazer**). `taps.yml` picks up
@@ -61,10 +62,10 @@ src/
     home.js   Início: a summary whose rows open the sub-tab where each thing is dealt with
     <tab>/index.js       the tab: its sub-tabs, and the context they share (built once per render)
     <tab>/<sub-tab>.js   one sub-tab: id, label, render(t, ctx) → HTML, optional bind(pane, t, ctx, { repaint, rerender })
-  main.js     vault, refresh, routing (tab + sub-tab, remembered per device), auto-lock
+  main.js     vault, refresh, routing (a tab opens on its first sub-tab), auto-lock
 ```
 
-- **Tabs:** Gastos (Ciclo · Grupos · Faturas · Histórico) · Investimentos (Carteira · Rendimentos · Vencimentos · Regras) ·
+- **Tabs:** Gastos (Ciclo · Grupos · Fatura · Parcelas · Assinaturas · Histórico) · Investimentos (Carteira · Rendimentos · Vencimentos · Regras) ·
   Projeção (Cenários · Real × plano · Premissas) · Ajustes (Conexões · Metas · Segurança · App).
 - A sub-tab owns its pane: `repaint()` redraws only it (UI state changed), `rerender()` the whole tab (data changed). A
   sub-tab that throws shows an error in its own pane and the others still work.

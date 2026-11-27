@@ -3,6 +3,7 @@
 import { unseal } from "../src/lib/seal.js";
 import { merge, canon } from "../src/lib/sync.js";
 import { validMonthly, validRenewals } from "../src/lib/decisions.js";
+import { validWarnings } from "../src/lib/warnings.js";
 
 export const PHONE_FILE = "phone.enc";
 
@@ -35,5 +36,7 @@ export async function pullPhone(state, { gist, key, owner = process.env.GITHUB_R
   // The month-end summary the phone built (src/lib/closing.js): sent once per period by run.mjs.
   const c = phone.closing;
   if (c && /^\d{4}-\d{2}$/.test(c.id) && Number.isFinite(c.spent) && c.id !== state.closing?.id) state.closing = { ...c, sent: false };
+  // The mid-cycle warnings (src/lib/warnings.js): the latest the phone saw; run.mjs sends each once per cycle.
+  if (validWarnings(phone.warnings) && !(state.warnings?.at > phone.warnings.at)) state.warnings = phone.warnings;
   return String(changed);
 }
