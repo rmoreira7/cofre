@@ -4,6 +4,7 @@ import { unseal } from "../src/lib/seal.js";
 import { merge, canon } from "../src/lib/sync.js";
 import { validMonthly, validRenewals } from "../src/lib/decisions.js";
 import { validWarnings } from "../src/lib/warnings.js";
+import { validWeeks } from "../src/lib/weekly.js";
 
 export const PHONE_FILE = "phone.enc";
 
@@ -38,5 +39,7 @@ export async function pullPhone(state, { gist, key, owner = process.env.GITHUB_R
   if (c && /^\d{4}-\d{2}$/.test(c.id) && Number.isFinite(c.spent) && c.id !== state.closing?.id) state.closing = { ...c, sent: false };
   // The mid-cycle warnings (src/lib/warnings.js): the latest the phone saw; run.mjs sends each once per cycle.
   if (validWarnings(phone.warnings) && !(state.warnings?.at > phone.warnings.at)) state.warnings = phone.warnings;
+  // The weeks' spending for the Monday message (src/lib/weekly.js).
+  if (validWeeks(phone.week) && !(state.week?.[0]?.at > phone.week[0]?.at)) state.week = phone.week;
   return String(changed);
 }

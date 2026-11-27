@@ -1,5 +1,6 @@
 // Daily run (.github/workflows/watch.yml): pull Pluggy, record any button taps, report how decided things turned out,
-// send each decision due today as its own message with ✓ Feito / ⏰ Adiar buttons, and the Monday digest.
+// send each decision due today as its own message with ✓ Feito / ⏰ Adiar buttons, and the Monday message (the past
+// week, this week, what is ahead).
 // Logs carry counts only, never amounts or names.
 // env: PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET, PLUGGY_ITEMS ("label:id,…"), COFRE_ENTITIES (rules.entities JSON),
 //      TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, COFRE_STATE_KEY + STATE_PATH (buttons; without them, plain messages),
@@ -126,7 +127,7 @@ for (const u of d.urgent.filter((u) => u.facts).slice(0, MAX_EXPLAIN)) {
 if (tokens) console.log(`openai tokens: ${tokens}`);
 console.log(`decisions: ${d.urgent.length} due, ${reports.length} reports, ${d.weekly.length} weekly, digest=${d.monday}`);
 
-const week = digest(d, today);
+const week = digest(d, today, state.week);
 // The month-end summary from the phone, once per period (state.closing.sent).
 const close = state.closing && !state.closing.sent ? closingText(state.closing) : null;
 // Mid-cycle warnings from the phone, each once per cycle (state.warned).

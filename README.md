@@ -21,8 +21,8 @@ DENYLIST=/path/outside/repo/denylist.txt scripts/install-hooks.sh
 
 `watch/` runs once a day from `.github/workflows/watch.yml` (08:00 BRT). It pulls Pluggy with the same `src/lib`
 the app uses and sends the decisions that are due to a private Telegram chat: maturities at D-7/3/1/0 with the
-ladder's split, card bills at D-3/1, renewals (subscriptions, annual plans) at D-30/7/1/0, and a Monday digest (idle cash with its cost
-per business day, FGC, failed banks, expiring consents). Mid-cycle warnings (a group past its limit, the target passed, spending well
+ladder's split, card bills at D-3/1, renewals (subscriptions, annual plans) at D-30/7/1/0, and a Monday message: last week's spending and the cycle (built on the phone, `src/lib/weekly.js`), what falls due
+this week, idle cash with its cost per business day, FGC, failed banks, expiring consents. Mid-cycle warnings (a group past its limit, the target passed, spending well
 above the usual pace) are built on the phone (`src/lib/warnings.js`) and sent once each per cycle. The renewal list is a private Actions secret (`COFRE_RENEWALS`)
 and a `renewals` list in the rules file, never in this repository.
 

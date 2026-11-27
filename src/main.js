@@ -6,6 +6,7 @@ import { slim, holdings, primaryEntity, bankName, shouldAutoRefresh } from "./li
 import { localToday, daysBetween } from "./lib/format.js";
 import { CLOSING_DAYS } from "./lib/closing.js";
 import { cycleWarnings } from "./lib/warnings.js";
+import { weeksForPhone } from "./lib/weekly.js";
 import { setQuery } from "./screens/spend/search.js";
 import { logPositions } from "./lib/income.js";
 import { keepYearEnd } from "./lib/yearend.js";
@@ -19,7 +20,7 @@ import * as investments from "./screens/investments/index.js";
 import * as projection from "./screens/projection/index.js";
 import * as settings from "./screens/settings/index.js";
 
-export const APP_VERSION = "0.37.0";
+export const APP_VERSION = "0.38.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, investments, projection, settings };
 
@@ -101,14 +102,16 @@ function syncDecisions({ force = false } = {}) {
       const lists = state.data.lists ? { lists: state.data.lists } : {};
       // The month-end summary, for the watcher to send to Telegram once (it has no categorization rules of its own).
       // And the mid-cycle warnings (a group past its limit, the target passed, a high pace), each sent once per cycle.
-      let closing = null, warnings = null;
+      let closing = null, warnings = null, week = null;
       try {
         const v = ctx.view();
         if (v.closing && daysBetween(v.closing.end, localToday()) <= CLOSING_DAYS) closing = v.closing;
         warnings = cycleWarnings(v);
-      } catch { closing = null; warnings = null; }
+        week = weeksForPhone(v);
+      } catch { closing = null; warnings = null; week = null; }
       if (closing) lists.closing = closing;
       if (warnings) lists.warnings = warnings;
+      if (week) lists.week = week; // the Monday message's spending lines (src/lib/weekly.js)
       const h = canon({ ...m, ...lists });
       if (cfg.gist && cfg.token && h !== state.data.syncPushed) {
         await pushPhone({ gist: cfg.gist, token: cfg.token, key: cfg.key, value: { v: 1, ...m, ...lists } });

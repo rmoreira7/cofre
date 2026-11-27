@@ -4,7 +4,8 @@
 // Mondays. One the owner already decided or snoozed (Telegram buttons, watch/state.mjs) stays quiet: quiet(id).
 import { holdings, cards, maturities, fgc, primaryEntity, itemStatus } from "../src/lib/model.js";
 import { ladder, RUNGS } from "../src/lib/ladder.js";
-import { candidates } from "../src/lib/decisions.js";
+import { candidates, nextMonthly, upcomingRenewals } from "../src/lib/decisions.js";
+import { weekLines } from "../src/lib/weekly.js";
 import { brl, daysBetween } from "../src/lib/format.js";
 import { earnText } from "../src/ui/earn.js";
 
@@ -40,6 +41,13 @@ export function decide(v, { today, monday = new Date(today + "T12:00:00Z").getUT
     urgent.push({ id: d.id, d, text: text(d), ...(d.kind === "maturity" && { facts: maturityFacts(d, lad.plan.find((x) => x.due === d.due), lad, cdiDaily) }) });
   }
   if (monday) {
+    // What falls due in the 7 days from today, in date order.
+    const soon = [];
+    for (const c of v.cards || []) if (c.due && c.bill > 0 && daysBetween(today, c.due) >= 0 && daysBetween(today, c.due) <= 6) soon.push([c.due, `🧾 Fatura ${esc(c.name)} <b>${brl(c.bill)}</b>`]);
+    for (const r of v.mat.rows) if (r.days >= 0 && r.days <= 6) soon.push([r.due, `💰 ${esc(r.issuer)} <b>${brl(r.balance)}</b> vence${joint(r)}`]);
+    for (const m of nextMonthly(monthly, today, snapshot)) if (m.days >= 0 && m.days <= 6) soon.push([m.due, `📱 ${esc(m.name)}${m.amount != null ? ` ~${brl(m.amount, 2)}` : ""}`]);
+    for (const r of upcomingRenewals(renewals, today, 6)) soon.push([r.date, `🔁 ${esc(r.name)} renova${r.amount ? ` ${brl(r.amount, 2)}` : ""}`]);
+    for (const [d, line] of soon.sort((a, b) => a[0].localeCompare(b[0]))) weekly.push({ sec: "soon", line: `• ${ddmm(d)} ${line}` });
     for (const r of v.mat.rows) if (r.days > 7 && r.days <= 30) weekly.push({ sec: "mat", line: `• ${esc(r.issuer)} <b>${brl(r.balance)}</b> · ${ddmm(r.due)}${joint(r)}` });
     for (const s of v.status) {
       if (!s.ok) weekly.push({ sec: "bank", line: `⚠️ ${esc(s.name)}: sincronização falhou (${esc(s.error || s.status || "?")})` });
@@ -97,10 +105,14 @@ export function maturityFacts(d, p, lad, cdiDaily) {
 export const decisionText = (u) => (u.why ? `${u.text}\n\n💬 <i>${esc(u.why)}</i>` : u.text);
 
 // The Monday digest (null on other days): what is coming but not urgent, and the connections' health.
-const WEEK_SECS = [["mat", "Vencem nos próximos 30 dias"], ["bank", "Conexões"]];
-export function digest({ weekly, monday, urgent }, today) {
+const WEEK_SECS = [["soon", "Esta semana"], ["mat", "Vencem nos próximos 30 dias"], ["bank", "Conexões"]];
+// The Monday message: the past week's spending and the cycle (from the phone, `weeks`), what falls due this week, the
+// maturities ahead, and the connections' health.
+export function digest({ weekly, monday, urgent }, today, weeks = null) {
   if (!monday) return null;
   const L = [`📅 <b>Cofre · semana de ${ddmm(today)}</b>`];
+  const past = weekLines(weeks, today);
+  if (past.length) L.push("", ...past);
   for (const [sec, title] of WEEK_SECS) {
     const lines = weekly.filter((w) => w.sec === sec).map((w) => w.line);
     if (lines.length) L.push("", `<b>${title}</b>`, ...lines);
