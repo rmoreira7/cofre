@@ -17,7 +17,7 @@ import * as investments from "./screens/investments/index.js";
 import * as projection from "./screens/projection/index.js";
 import * as settings from "./screens/settings/index.js";
 
-export const APP_VERSION = "0.33.0";
+export const APP_VERSION = "0.34.0";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, investments, projection, settings };
 
@@ -386,9 +386,10 @@ app.addEventListener("click", (e) => {
   if (g) { const [tab, sub] = g.split(":"); go(tab, sub); }
 });
 
+// A tap on the bottom bar always opens the tab's first sub-tab (Rafael); a refresh or a link keeps or picks its own.
 tabs.addEventListener("click", (e) => {
   const b = e.target.closest("button");
-  if (b) go(b.dataset.s);
+  if (b) { delete state.sub[b.dataset.s]; saveSubs(); go(b.dataset.s); }
 });
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");

@@ -13,19 +13,20 @@ test("closing: last period against the target and limits, income, measured earni
   const income = [{ d: "2026-11-05", m: "2026-11", amt: 3000, kind: "salary" }, { d: "2026-11-10", m: "2026-11", amt: 100, kind: "other" }];
   const month = monthView(rows, { today, target: 700 });
   const log = [{ v: 2, d: "2026-10-31", p: { a: [1000, 900, 1, "nubank"], j: [500, 500, 1, "itau"] } }, { v: 2, d: "2026-11-30", p: { a: [1010, 900, 1, "nubank"], j: [505, 500, 1, "itau"] } }];
-  const c = closing({ rows, income, month, cycles: null, target: 700, limits: { bills: 430 }, log, own: ["nubank"], bills: [{ month: "2026-12", open: true }, { month: "2027-01", open: false, amount: 180 }], today });
+  const c = closing({ rows, income, month, cycles: null, target: 700, limits: { bills: 430 }, log, own: ["nubank"], bills: [{ month: "2026-12", open: true, amount: 640 }, { month: "2027-01", open: false, amount: 180 }], today });
   assert.equal(c.id, "2026-11");
   assert.deepEqual([c.start, c.end, c.spent, c.over], ["2026-11-01", "2026-11-30", 900, true]);
   assert.deepEqual(c.overGroups.map((g) => [g.id, g.over]), [["bills", 70]]);
   assert.deepEqual([c.income, c.salary, c.left], [3100, 3000, 2200]);
   assert.equal(c.earned, 10, "own banks only");
-  assert.deepEqual(c.committed, { month: "2027-01", amount: 180 });
+  assert.deepEqual(c.committed, { month: "2026-12", amount: 640 }, "the new cycle's own (open) bill");
   const t = closingText(c);
   assert.match(t, /Fechamento · nov\/26/);
-  assert.match(t, /Gastou <b>R\$ 900<\/b> de R\$ 700 · <b>R\$ 200 acima<\/b>/);
-  assert.match(t, /Acima do limite: .* \+R\$ 70/);
-  assert.match(t, /renderam R\$ 10 líquidos/);
-  assert.match(t, /Fatura de jan já tem R\$ 180 em parcelas/);
+  assert.match(t, /🔴 <b>R\$ 900<\/b> de R\$ 700\nR\$ 200 acima da meta/);
+  assert.match(t, /• .* <b>R\$ \d+<\/b>  ⚠️ \+R\$ 70/);
+  assert.match(t, /📈 Investimentos renderam R\$ 10/);
+  assert.match(t, /🧾 A fatura deste ciclo \(\w+\) já tem R\$ \d+/);
+  assert.ok(t.split("\n").every((l) => l.length < 70), "one short fact per line");
 });
 
 test("usual bill = median of the last 6 closed; future bills use it when it is more than what is posted", () => {

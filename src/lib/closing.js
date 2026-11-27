@@ -15,7 +15,8 @@ export function closing({ rows, income, month, cycles, target, limits = {}, log 
   if (!prev) return null;
   const s = period(prev, { rows, income, cycles, target, limits, log, own });
   if (today <= s.end) return null;
-  const next = bills.find((m) => !m.open);
+  // The new cycle's bill (the open one): what it already holds the day the old cycle closes.
+  const next = bills.find((m) => m.open) || bills[0];
   return { ...s, committed: next ? { month: next.month, amount: next.amount } : null };
 }
 
@@ -51,15 +52,29 @@ export function period(prev, { rows, income, cycles, target, limits = {}, log = 
 const label = (c) => (c.cycle ? `ciclo ${ddmm(c.start)} → ${ddmm(c.end)}` : `${MES[Number(c.id.slice(5)) - 1]}/${c.id.slice(2, 4)}`);
 const esc = (s) => String(s ?? "").replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[ch]);
 
-// The Telegram message (HTML), from the summary alone: the watcher calls it with what the phone sent.
+// The Telegram message (HTML), from the summary alone: the watcher calls it with what the phone sent. One fact per
+// line: the result, where the money went (the biggest groups, the ones over their limit flagged), what came in.
+export const TOP_GROUPS = 5;
 export function closingText(c) {
-  const lines = [`📊 <b>Fechamento · ${label(c)}</b>`, ""];
-  lines.push(`Gastou <b>${brl(c.spent)}</b> de ${brl(c.target)}${c.over ? ` · <b>${brl(c.spent - c.target)} acima</b>` : ` · sobrou ${brl(c.target - c.spent)}`}`);
-  if (c.overGroups.length) lines.push(`Acima do limite: ${c.overGroups.map((g) => `${esc(g.label)} +${brl(g.over)}`).join(" · ")}`);
-  const top = c.groups.slice(0, 3).map((g) => `${esc(g.label)} ${brl(g.spent)}`).join(" · ");
-  if (top) lines.push(`Maiores: ${top}`);
-  if (c.income) lines.push(`Entrou ${brl(c.income)}${c.salary ? ` (salário ${brl(c.salary)})` : ""} · ${c.left >= 0 ? "sobrou" : "faltou"} ${brl(Math.abs(c.left))}`);
-  if (c.earned != null) lines.push(`Investimentos renderam ${brl(c.earned)} líquidos`);
-  if (c.committed?.amount > 0) lines.push(`Fatura de ${MES[Number(c.committed.month.slice(5)) - 1]} já tem ${brl(c.committed.amount)} em parcelas`);
-  return lines.join("\n");
+  const L = [`📊 <b>Fechamento · ${label(c)}</b>`, ""];
+  L.push(`${c.over ? "🔴" : "🟢"} <b>${brl(c.spent)}</b> de ${brl(c.target)}`);
+  L.push(c.over ? `${brl(c.spent - c.target)} acima da meta` : `sobrou ${brl(c.target - c.spent)} da meta`);
+  if (c.groups.length) {
+    L.push("", "<b>Onde foi</b>");
+    for (const g of c.groups.slice(0, TOP_GROUPS)) L.push(`• ${esc(g.label)} <b>${brl(g.spent)}</b>${g.over ? `  ⚠️ +${brl(g.over)}` : ""}`);
+    const rest = c.groups.slice(TOP_GROUPS);
+    if (rest.length) {
+      const over = rest.filter((g) => g.over).map((g) => `${esc(g.label)} ⚠️ +${brl(g.over)}`);
+      L.push(`• + ${rest.length} ${rest.length === 1 ? "outro" : "outros"} ${brl(rest.reduce((a, g) => a + g.spent, 0))}${over.length ? ` (${over.join(", ")})` : ""}`);
+    }
+  }
+  const money = [];
+  if (c.income) {
+    money.push(`💰 Entrou ${brl(c.income)}${c.salary ? ` (salário ${brl(c.salary)})` : ""}`);
+    money.push(c.left >= 0 ? `✅ Sobrou ${brl(c.left)}` : `🔻 Faltou ${brl(-c.left)}`);
+  }
+  if (c.earned != null) money.push(`📈 Investimentos renderam ${brl(c.earned)}`);
+  if (money.length) L.push("", ...money);
+  if (c.committed?.amount > 0) L.push("", `🧾 A fatura deste ciclo (${MES[Number(c.committed.month.slice(5)) - 1]}) já tem ${brl(c.committed.amount)}`);
+  return L.join("\n");
 }
