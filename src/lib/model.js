@@ -26,6 +26,18 @@ export const CONCENTRATION = 0.4;
 // Keep only what the app reads: the vault stays small and holds no field the app never shows.
 const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
 const TX = ["id", "date", "amount", "description", "operationType", "category", "status"];
+
+// A purchase in another currency comes with `amount` in that currency and `amountInAccountCurrency` in the account's:
+// what the card really charged. Everything here counts the account's money, so that is the amount; the original stays
+// as `foreign` ({ amount, currency }). Mirror of analyze.py in_account_currency().
+export function inAccountCurrency(transactions, account) {
+  const cur = account?.currencyCode || "BRL";
+  return (transactions || []).map((t) => {
+    const v = t.amountInAccountCurrency;
+    if (!t.currencyCode || t.currencyCode === cur || !Number.isFinite(v)) return t;
+    return { ...t, amount: Math.sign(t.amount || v) * Math.abs(v), foreign: { amount: Math.abs(t.amount), currency: t.currencyCode } };
+  });
+}
 const INV = ["id", "name", "issuer", "type", "subtype", "status", "balance", "amountOriginal", "rate", "rateType", "fixedAnnualRate", "dueDate", "purchaseDate", "issueDate", "taxes", "taxes2", "taxExempt", "quantity"];
 
 export function slim(pulled) {
@@ -43,8 +55,9 @@ export function slim(pulled) {
           ),
           credit: a.type === "CREDIT" ? pick(a.creditData || {}, ["creditLimit", "availableCreditLimit", "balanceDueDate", "balanceCloseDate"]) : undefined,
           bills: a.bills?.map((b) => pick(b, ["dueDate", "totalAmount", "billClosingDate"])),
-          transactions: (BANKS[it.label]?.balanceOnly ? [] : a.type === "CREDIT" ? alignInstallments(cleanCard(a.transactions), lastClosing(a.bills)) : a.transactions).map((t) => {
+          transactions: (BANKS[it.label]?.balanceOnly ? [] : a.type === "CREDIT" ? alignInstallments(cleanCard(inAccountCurrency(a.transactions, a)), lastClosing(a.bills)) : inAccountCurrency(a.transactions, a)).map((t) => {
             const out = pick(t, TX);
+            if (t.foreign) out.foreign = t.foreign;
             // Bank codes only (never account numbers): who sent and who received a transfer, for income detection.
             const pd = t.paymentData;
             if (pd?.payer?.routingNumber) out.from = String(Number(pd.payer.routingNumber));

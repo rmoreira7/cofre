@@ -192,3 +192,17 @@ test("billMonths: the open bill (charges − early payment) first, then the inst
   assert.deepEqual(m[1].rows.map((r) => [r.name, r.n, r.of]), [["Loja B", 2, 3]]);
   assert.equal(m[2].amount, 200);
 });
+
+test("a purchase in another currency counts what the card charged in reais; the original is kept", async () => {
+  const { inAccountCurrency } = await import("../src/lib/model.js");
+  const [usd, brl, wise] = inAccountCurrency([
+    { id: "a", amount: 266.62, currencyCode: "USD", amountInAccountCurrency: 1402.55 },
+    { id: "b", amount: -49.09, currencyCode: "BRL", amountInAccountCurrency: null },
+    { id: "c", amount: -10, currencyCode: "USD", amountInAccountCurrency: 55 },
+  ], { currencyCode: "BRL" });
+  assert.equal(usd.amount, 1402.55);
+  assert.deepEqual(usd.foreign, { amount: 266.62, currency: "USD" });
+  assert.equal(brl.amount, -49.09);
+  assert.equal(wise.amount, -55); // a credit stays a credit
+  assert.equal(inAccountCurrency([{ amount: 20, currencyCode: "USD", amountInAccountCurrency: 20 }], { currencyCode: "USD" })[0].foreign, undefined);
+});
