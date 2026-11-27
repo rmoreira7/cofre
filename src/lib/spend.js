@@ -94,9 +94,18 @@ export function spendRows(pulled, { rules, compiled, entity, today, cycles = nul
   const cat = (src, x) => categorize({ src, op: x.operationType, desc: x.description, pluggy: x.category ?? null }, compiled, learned, entity);
 
   const rows = [];
+  // An installment the bank already put on the open bill counts in this cycle now, though its date is still ahead:
+  // the cycle then shows what the bill already holds (Gastos › Fatura), not only what was bought so far.
+  const openCyc = cycles ? cycleOf(today, cycles) : null;
   for (const x of [...card, ...hist]) {
     const d = x.date.slice(0, 10);
-    if (d > today || x.operationType === "PAGAMENTO_FATURA") continue;
+    if (x.operationType === "PAGAMENTO_FATURA") continue;
+    if (d > today) {
+      if (!openCyc || !(x.amount > 0)) continue;
+      const r = row(d, x.amount, cat("card", x), "card", x, cycles);
+      if (r.inst && r.cyc <= openCyc) rows.push(Object.assign(r, { ahead: true }));
+      continue;
+    }
     if (x.cyc && !cycles && d >= firstPluggy) continue;
     if (x.amount > 0) rows.push(row(d, x.amount, cat("card", x), "card", x, cycles));
     else if (refunds.has(x)) {

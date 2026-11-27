@@ -30,7 +30,8 @@ export function pace(month, { rows, cycles = null, monthly = [], renewals = [], 
     if (!b || total <= 0) continue;
     const len = daysBetween(b.start, b.end) + 1;
     const cut = addDays(b.start, Math.round(elapsed * len) - 1);
-    shares.push(xs.filter((r) => r.d <= cut).reduce((a, r) => a + r.amt, 0) / total);
+    // Installments are on the bill from the cycle's start (the current one counts them up front too).
+    shares.push(xs.filter((r) => r.d <= cut || r.inst).reduce((a, r) => a + r.amt, 0) / total);
   }
   const usual = shares.length >= MIN_PAST;
   const share = usual ? Math.min(1, Math.max(0, median(shares))) : elapsed;

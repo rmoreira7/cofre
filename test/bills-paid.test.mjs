@@ -91,3 +91,16 @@ test("candidates: a conta charged on the card is not a decision", () => {
   const out = candidates(v, { monthly, today: "2026-11-27" });
   assert.deepEqual(out.map((d) => d.name), ["Internet"]);
 });
+
+test("spendRows: an installment already on the open bill counts in this cycle before its date; later bills' do not", async () => {
+  const { cardCycles } = await import("../src/lib/spend.js");
+  const r = { ...rules, primary: "me" };
+  const s = snap();
+  s.items[0].accounts[1].transactions.push(
+    { id: "i2", date: "2026-12-06T12:00:00Z", amount: 50, description: "Loja D 2/6", card: { billForecastDate: "2027-01-03", paymentType: "INSTALLMENT", installmentNumber: 2, totalInstallments: 6, purchaseDate: "2026-11-07" } },
+    { id: "i3", date: "2027-01-06T12:00:00Z", amount: 50, description: "Loja D 3/6", card: { billForecastDate: "2027-02-03", paymentType: "INSTALLMENT", installmentNumber: 3, totalInstallments: 6, purchaseDate: "2026-11-07" } });
+  const cycles = cardCycles(s, { rules: r, entity: "me" });
+  const rows = spendRows(s, { rules: r, compiled: compileRules(r, {}), entity: "me", today: "2026-11-27", cycles });
+  const ahead = rows.filter((x) => x.ahead);
+  assert.deepEqual(ahead.map((x) => [x.d, x.cyc]), [["2026-12-06", "2026-12"]]);
+});
