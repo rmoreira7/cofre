@@ -44,7 +44,7 @@ function add(t, i, cdiDaily) {
 }
 const sumUp = (list) => list.reduce((a, b) => { for (const k of Object.keys(a)) a[k] += b[k]; return a; }, zero());
 
-// Per bank (the joint account tagged), with own and joint totals and the own money's split by maturity bracket.
+// Per bank (the joint account tagged), with own, joint and overall totals and the split of all of it by maturity bracket.
 export function income(snapshot, rules, cdiDaily) {
   const primary = primaryEntity(rules);
   const banks = [];
@@ -56,15 +56,16 @@ export function income(snapshot, rules, cdiDaily) {
     const t = { label: it.label, name: bankName(it.label), joint, ...zero() };
     for (const i of it.investments) {
       add(t, i, cdiDaily);
-      if (!joint) { const r = taxRate(i); brackets.set(r, (brackets.get(r) || 0) + (i.balance || 0)); }
+      const r = taxRate(i); brackets.set(r, (brackets.get(r) || 0) + (i.balance || 0));
     }
     banks.push(t);
   }
   banks.sort((a, b) => b.balance - a.balance);
   const own = sumUp(banks.filter((b) => !b.joint));
   const joint = sumUp(banks.filter((b) => b.joint));
-  const split = [...brackets].filter(([, v]) => v > 0).sort((a, b) => a[0] - b[0]).map(([rate, amount]) => ({ rate, amount, share: own.balance ? amount / own.balance : 0 }));
-  return { banks, own, joint, brackets: split, cdiDaily, cdiAnnual: cdiAnnual(cdiDaily) };
+  const all = sumUp(banks);
+  const split = [...brackets].filter(([, v]) => v > 0).sort((a, b) => a[0] - b[0]).map(([rate, amount]) => ({ rate, amount, share: all.balance ? amount / all.balance : 0 }));
+  return { banks, own, joint, all, brackets: split, cdiDaily, cdiAnnual: cdiAnnual(cdiDaily) };
 }
 
 // The CDB rate (% of CDI) that matches a tax-exempt rate after a bracket's IR: 88% exempt = 103,5% at 15%.

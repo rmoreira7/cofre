@@ -106,11 +106,13 @@ test("Agenda: card bills (open and installments ahead), contas do mês with paid
   assert.match(home.screen.subs.find((x) => x.id === "summary").render(home.screen.context(ctx), ctx), /data-go="home:agenda"/);
 });
 
-test("Rendimentos shows the measured history with the joint account apart", () => {
+test("Rendimentos counts the joint account with the others: one total, no card apart", () => {
   const html = investments.subs.find((x) => x.id === "income").render(investments.context(ctx), ctx);
   assert.match(html, /Histórico, medido/);
   assert.match(html, /data-hb="itau"/);
   assert.match(html, /conjunta/);
+  assert.match(html, /<b>Total<\/b>/);
+  assert.doesNotMatch(html, /Conta conjunta<\/div>|Seu total/);
 });
 
 test("the receita of a maturity: Próximos 30 dias, Vencimentos and the decision card", () => {

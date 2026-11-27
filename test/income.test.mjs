@@ -44,7 +44,8 @@ test("income: balance is net, gain = balance − invested, gross value adds the 
   assert.equal(x.joint.n, 1);
   near(x.joint.net, x.joint.gross); // LCA: exempt
   assert.equal(x.banks.find((b) => b.label === "bank_j").joint, true);
-  assert.deepEqual(x.brackets.map((b) => b.rate), [0.15]); // the joint account stays out of the own split
+  assert.deepEqual(x.brackets.map((b) => b.rate), [0, 0.15]); // every bank in the split, the joint one too
+  assert.equal(x.all.n, 3);
 });
 
 test("no CDI → no monthly estimate, the rest still adds up", () => {
