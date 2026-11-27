@@ -12,7 +12,7 @@ const MAX_RULES_BYTES = 5 * 1024 * 1024;
 
 export function key(desc) {
   let s = desc.split("|").at(-1);
-  s = s.replace(/\s*\d+\/\d+\s*$/, "");
+  s = s.replace(/\s*-\s*parcela\s*(?=\d+\/\d+\s*$)/i, " ").replace(/\s*\d+\/\d+\s*$/, ""); // statements: "X - Parcela 3/10"
   return s.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
