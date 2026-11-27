@@ -1,6 +1,7 @@
 // Decisions: what is open, what was decided, and how it turned out. Pure, no DOM; shared by the app and the watcher.
 import { daysBetween } from "./format.js";
 import { maturityEarnings } from "./income.js";
+import { paidSince } from "./model.js";
 
 // Renewals (subscriptions, annual plans) come from the rules file's `renewals`: [{ name, date: "YYYY-MM-DD", note?,
 // amount?, every?: "month" | "year" }]. The personal list lives on the laptop, never in this repository.
@@ -120,7 +121,8 @@ export function candidates(v, { lad, renewals = [], monthly = [], snapshot = nul
   for (const e of v.guarantee?.issuers.filter((x) => x.over) || []) out.push({ id: `fgc:${e.issuer}`, kind: "fgc", title: `Tirar o excesso de ${e.issuer}`, issuer: e.issuer, due: today, days: 0, amount: e.over, joint: e.joint, detail: { total: e.amount } });
   for (const r of upcomingRenewals(renewals, today, RENEWAL_WINDOW)) out.push({ id: `ren:${r.name}:${r.date}`, kind: "renewal", title: `${r.name} renova`, name: r.name, due: r.date, days: r.days, amount: r.amount ?? null, every: r.every, detail: r.note || null });
   for (const m of nextMonthly(monthly, today, snapshot)) {
-    if (m.days > BILL_WINDOW || monthlyPayment(snapshot, m, m.due)) continue;
+    // On a credit card it is charged by itself (YouTube, Google One): nothing to decide, it leaves with the card's bill.
+    if (m.card || m.days > BILL_WINDOW || monthlyPayment(snapshot, m, m.due)) continue;
     out.push({ id: `mon:${m.name}:${m.due.slice(0, 7)}`, kind: "monthly", title: `Pagar ${m.name}`, name: m.name, due: m.due, days: m.days, amount: m.amount ?? null, match: m.match || [], detail: m.note || null });
   }
   return out.sort((a, b) => a.days - b.days || (b.amount || 0) - (a.amount || 0));
@@ -173,7 +175,8 @@ export function outcome(rec, snapshot, { today, idleCash = 5000 } = {}) {
   }
   if (d.kind === "bill") {
     const card = (item?.accounts || []).find((a) => a.type === "CREDIT");
-    const paid = (card?.transactions || []).filter((t) => t.operationType === "PAGAMENTO_FATURA" && t.date.slice(0, 10) >= addDays(rec.at, -3) && t.date.slice(0, 10) <= addDays(d.due, 3)).reduce((a, t) => a - t.amount, 0);
+    // On the card or by boleto from any account (the XP card is paid from the Nubank account).
+    const paid = snapshot ? paidSince(snapshot, d.bank, card, addDays(rec.at, -3)).amount : 0;
     if (paid >= 0.9 * d.amount) return { state: "ok", paid };
     return { state: today > addDays(d.due, 3) ? "no" : "wait", paid };
   }

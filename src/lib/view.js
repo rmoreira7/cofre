@@ -6,7 +6,7 @@ import { holdings, cards, maturities as maturityLadder, fgc, primaryEntity, aler
 import { daysBetween } from "./format.js";
 import { agenda, cashOf } from "./agenda.js";
 import { listsOf } from "./lists.js";
-import { closing } from "./closing.js";
+import { closing, period } from "./closing.js";
 import { pace } from "./pace.js";
 import { recurring } from "./recurring.js";
 import { income as investIncome, mergeLog, monthlyHistory, maturityEarnings } from "./income.js";
@@ -54,7 +54,10 @@ export function buildView(data, today) {
   v.bills = billMonths(snap, rules, me, today);
   v.history = monthlyHistory(mergeLog(rules?.invHistory, data.invLog), Object.fromEntries(v.income.banks.map((b) => [b.label, b.net])));
   v.alerts = alerts(v, { idleCash: s.idleCash ?? 5000, cdbMin: s.cdbMin ?? 110 });
-  v.closing = closing({ rows, income, month, cycles, target: s.target ?? DEFAULT_TARGET, limits: s.limits || {}, log: mergeLog(rules?.invHistory, data.invLog), own: mine.banks.map((b) => b.label), bills: v.bills, today });
+  const pOpts = { rows, income, cycles, target: s.target ?? DEFAULT_TARGET, limits: s.limits || {}, log: mergeLog(rules?.invHistory, data.invLog), own: mine.banks.map((b) => b.label) };
+  v.closing = closing({ ...pOpts, month, bills: v.bills, today });
+  // Gastos › Histórico: every past period on the chart, summarised like the month-end one.
+  v.periods = Object.fromEntries((month.long || month.history).filter((h) => h.month !== month.month).map((h) => [h.month, { ...period(h.month, pOpts), cardOnly: Boolean(h.cardOnly) }]));
   v.pace = pace(month, { rows, cycles, monthly: lists.monthly, renewals: lists.renewals, snapshot: snap, today });
   v.recurring = recurring(rows, { lists, ignored: data.ignoredRecurring || [], today });
   v.cash = cashOf(mine, { earmark: s.billReserve || 0 });

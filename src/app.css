@@ -252,6 +252,7 @@ button.tile.tap.on{border-color:var(--brand)}
 .bill-bars button.open i{background:var(--brand)}
 .bill-bars button.sel i{opacity:1;outline:2px solid var(--ink);outline-offset:2px}
 .bill-bars button.sel{color:var(--ink);font-weight:700}
+.bill-bars button.over i{background:var(--bad)}.bill-bars button.under i{background:var(--ok)}.bill-bars button.dim i{opacity:.25}.bill-bars button.dim.sel i{opacity:.6}
 .pl{display:inline-block;font-size:11px;font-weight:650;color:var(--ink-2);background:var(--surface-2);border-radius:6px;padding:1px 6px}
 /* Rendimentos: measured vs estimated per month */
 .hist-bars{display:flex;align-items:flex-end;gap:14px;height:112px;margin-top:12px;padding:0 4px}

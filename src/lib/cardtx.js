@@ -56,6 +56,43 @@ export function ghostIds(transactions) {
   return drop;
 }
 
+// Pluggy's bill month for installments not yet on a closed bill drifts when one falls on the closing day (Nubank's 26th):
+// 2/6 of a purchase made on 26/11 lands in January although the bank puts it in February. Checked against Nubank's own
+// future-bill statements: one installment per bill, so installment n sits (n − a) bills after the plan's anchor a,
+// the latest installment already on a closed bill (else the plan's first row). Rows on a closed bill stay as they are.
+const ym = (iso) => iso.slice(0, 7);
+const plusMonths = (m, n) => { const [y, mo] = m.split("-").map(Number); const t = y * 12 + mo - 1 + n; return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`; };
+export function alignInstallments(transactions, lastClose) {
+  if (!lastClose) return transactions;
+  const plans = new Map();
+  for (const t of transactions) {
+    const m = meta(t);
+    if (m.paymentType !== "INSTALLMENT" || !m.installmentNumber || !m.billForecastDate) continue;
+    const k = planKey(t);
+    if (!plans.has(k)) plans.set(k, []);
+    plans.get(k).push(t);
+  }
+  const fix = new Map();
+  for (const rows of plans.values()) {
+    const closed = rows.filter((t) => t.date.slice(0, 10) < lastClose);
+    const pool = closed.length ? closed : rows;
+    const a = pool.reduce((x, t) => ((closed.length ? meta(t).installmentNumber > meta(x).installmentNumber : meta(t).installmentNumber < meta(x).installmentNumber) ? t : x));
+    const an = meta(a).installmentNumber, am = ym(meta(a).billForecastDate);
+    for (const t of rows) {
+      const m = meta(t), n = m.installmentNumber;
+      if (t.date.slice(0, 10) < lastClose || n <= an) continue;
+      const want = plusMonths(am, n - an);
+      if (ym(m.billForecastDate) !== want) fix.set(t, `${want}${m.billForecastDate.slice(7)}`);
+    }
+  }
+  if (!fix.size) return transactions;
+  return transactions.map((t) => {
+    if (!fix.has(t)) return t;
+    const key = t.creditCardMetadata ? "creditCardMetadata" : "card";
+    return { ...t, [key]: { ...t[key], billForecastDate: fix.get(t) } };
+  });
+}
+
 export function cleanCard(transactions) {
   const g = ghostIds(transactions);
   return g.size ? transactions.filter((t) => !g.has(t.id)) : transactions;

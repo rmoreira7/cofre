@@ -136,3 +136,15 @@ test("Rendimentos: last year's 31/12 balances until December; this year's from D
   assert.match(dec, /em 20\/11/);
   assert.match(dec, /Atualize o Cofre no dia 31\/12/);
 });
+
+test("Gastos › Histórico: one bar per closed period, the latest picked, its groups and largest purchases; no Fechamento on Início", () => {
+  const t = spend.context(ctx);
+  const html = spend.subs.find((x) => x.id === "history").render(t, ctx);
+  const bars = html.match(/data-hm="/g) || [];
+  assert.ok(bars.length >= 5);
+  assert.match(html, /data-hm="2026-10" class="sel/);
+  assert.match(html, /Por grupo/);
+  assert.match(html, /Maiores gastos/);
+  assert.match(html, /Restaurante Teste/);
+  assert.doesNotMatch(home.subs.find((x) => x.id === "summary").render(home.context(ctx), ctx), /Fechamento/);
+});

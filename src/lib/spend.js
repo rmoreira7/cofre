@@ -1,7 +1,7 @@
 // Spending: a port of the spend side of finance/pluggy/analyze.py build(), plus the clusters of design §5.
 import { categorize, learn, entityOf } from "./categorize.js";
 import { cleanCard, refundMatches, refundTarget } from "./cardtx.js";
-import { BANKS } from "./model.js";
+import { BANKS, isCardPayment } from "./model.js";
 
 export const DEFAULT_TARGET = 7000;
 
@@ -76,6 +76,7 @@ export function spendRows(pulled, { rules, compiled, entity, today, cycles = nul
   const items = pulled.items.filter((it) => !it.error && entityOf(it.label, rules) === entity);
   const card = [], bank = [], refunds = new Map(), histBank = new Set();
   const h = rules.history && entityOf(rules.history.bank, rules) === entity ? rules.history : null;
+  const ownCards = [...new Set(items.filter((it) => it.accounts.some((a) => a.type === "CREDIT")).map((it) => it.label))];
   for (const it of items) for (const a of it.accounts) {
     if (a.type !== "CREDIT") { bank.push(...a.transactions); continue; }
     const txs = cleanCard(a.transactions);
@@ -114,6 +115,8 @@ export function spendRows(pulled, { rules, compiled, entity, today, cycles = nul
     if (x.amount >= 0 || d > today) continue;
     const c = cat("bank", x);
     if (isInternal(x, c)) continue;
+    // Paying one of his own cards from an account: the card's charges are already counted, one by one.
+    if (ownCards.some((bk) => isCardPayment(x, bk))) continue;
     rows.push(row(d, -x.amount, c, "account", x, cycles));
   }
   for (const r of rows) delete r._x;

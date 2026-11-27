@@ -58,7 +58,9 @@ function openCard(cards, months) {
       ${live.map((c) => {
         const how = c.exact ? `${brl(c.charges)} em ${lines(c.bank)} lançamentos${c.early ? ` − ${brl(c.early)} pagos adiantado` : ""}` : "saldo do cartão";
         const lim = c.limit ? ` · ${pct((c.used / c.limit) * 100, 0)} do limite` : "";
-        return `<div><span class="l"><b>${esc(c.name)} · ${brl(c.bill)}</b><small>${how}${lim}</small></span>${c.due ? `<span class="chip">${ddmm(c.due)}</span>` : ""}</div>`;
+        const paid = c.paid ? `<div><span class="l"><b class="ok">✓ ${esc(c.name)} · fatura de ${mon(c.paid.due.slice(0, 7))} paga</b><small>${brl(c.paid.total)}${c.paid.date ? ` em ${ddmm(c.paid.date)}` : ""}</small></span><span class="chip ok">paga</span></div>` : "";
+        const part = c.closed && c.partPaid ? ` · ${brl(c.partPaid)} já pagos` : "";
+        return `${paid}<div><span class="l"><b>${esc(c.name)} · ${brl(c.bill)}</b><small>${c.closed ? `fechada${part}` : c.paid ? `aberta, ainda recebe compras` : how}${lim}</small></span>${c.due ? `<span class="chip">${ddmm(c.due)}</span>` : ""}</div>`;
       }).join("")}
     </div></div>`;
 }

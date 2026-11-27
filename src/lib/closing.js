@@ -5,7 +5,7 @@ import { byMonth, sum, CLUSTERS, leftover, cycleBounds } from "./spend.js";
 import { earnedSteps } from "./income.js";
 import { brl, ddmm, MES } from "./format.js";
 
-export const CLOSING_DAYS = 10; // shown on Início for this many days after the period closes
+export const CLOSING_DAYS = 10; // the phone hands the summary to the watcher (Telegram) for this many days after the close
 
 const addDays = (iso, n) => new Date(Date.parse(iso + "T12:00:00Z") + n * 864e5).toISOString().slice(0, 10);
 
@@ -13,10 +13,19 @@ const addDays = (iso, n) => new Date(Date.parse(iso + "T12:00:00Z") + n * 864e5)
 export function closing({ rows, income, month, cycles, target, limits = {}, log = [], own = [], bills = [], today }) {
   const prev = month.history.at(-2)?.month;
   if (!prev) return null;
+  const s = period(prev, { rows, income, cycles, target, limits, log, own });
+  if (today <= s.end) return null;
+  const next = bills.find((m) => !m.open);
+  return { ...s, committed: next ? { month: next.month, amount: next.amount } : null };
+}
+
+// One closed period (a card cycle, or a calendar month): spent against the target and per group, what came in and
+// what the investments earned. Gastos › Histórico shows it for the bar tapped; closing() for the one just closed.
+const nextMonth = (m) => { const [y, mo] = m.split("-").map(Number); return mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, "0")}`; };
+export function period(prev, { rows, income, cycles, target, limits = {}, log = [], own = [] }) {
   const key = cycles ? "cyc" : "m";
   const b = cycles ? cycleBounds(prev, cycles) : null;
-  const start = b ? b.start : `${prev}-01`, end = b ? addDays(b.end, -1) : addDays(month.start, -1);
-  if (today <= end) return null;
+  const start = b ? b.start : `${prev}-01`, end = b ? addDays(b.end, -1) : addDays(`${nextMonth(prev)}-01`, -1);
   const per = byMonth(rows, "cluster", null, key)[prev] || {};
   const spent = sum(per);
   const groups = CLUSTERS.map((c) => {
@@ -31,13 +40,11 @@ export function closing({ rows, income, month, cycles, target, limits = {}, log 
     steps++;
     for (const [bank, v] of Object.entries(st.banks)) if (own.includes(bank)) earned += v;
   }
-  const next = bills.find((m) => !m.open);
   return {
     id: prev, start, end, cycle: Boolean(cycles), spent, target, over: spent > target,
     groups, overGroups: groups.filter((g) => g.over > 0),
     income: inc.income, salary: inc.salary, left: inc.left,
     earned: steps ? earned : null,
-    committed: next ? { month: next.month, amount: next.amount } : null,
   };
 }
 

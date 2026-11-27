@@ -2,7 +2,7 @@
 import { entityOf } from "./categorize.js";
 import { reservedHoldings } from "./pluggy.js";
 import { daysBetween } from "./format.js";
-import { cleanCard } from "./cardtx.js";
+import { cleanCard, alignInstallments } from "./cardtx.js";
 
 // codes: the bank's COMPE codes, so a transfer from a connected bank is recognised as internal.
 export const BANKS = {
@@ -43,7 +43,7 @@ export function slim(pulled) {
           ),
           credit: a.type === "CREDIT" ? pick(a.creditData || {}, ["creditLimit", "availableCreditLimit", "balanceDueDate", "balanceCloseDate"]) : undefined,
           bills: a.bills?.map((b) => pick(b, ["dueDate", "totalAmount", "billClosingDate"])),
-          transactions: (BANKS[it.label]?.balanceOnly ? [] : a.type === "CREDIT" ? cleanCard(a.transactions) : a.transactions).map((t) => {
+          transactions: (BANKS[it.label]?.balanceOnly ? [] : a.type === "CREDIT" ? alignInstallments(cleanCard(a.transactions), lastClosing(a.bills)) : a.transactions).map((t) => {
             const out = pick(t, TX);
             // Bank codes only (never account numbers): who sent and who received a transfer, for income detection.
             const pd = t.paymentData;
@@ -123,12 +123,55 @@ export function cards(snapshot, rules, entity, today) {
     if (it.error || entityOf(it.label, rules) !== entity) continue;
     for (const a of it.accounts) {
       if (a.type !== "CREDIT") continue;
+      const base = { bank: it.label, name: bankName(it.label), used: a.balance || 0, limit: a.credit?.creditLimit || null, typical: typicalBill(a.bills, today) };
+      // The last closed bill decides: unpaid, it is the bill to pay (its real total, less any part paid); paid, the bill
+      // to watch is the next one, still open.
+      const closed = (a.bills || []).filter((b) => b.billClosingDate && b.billClosingDate.slice(0, 10) <= today).sort((x, y) => y.billClosingDate.localeCompare(x.billClosingDate))[0];
+      if (closed?.totalAmount > 0) {
+        const from = closed.billClosingDate.slice(0, 10), cdue = closed.dueDate.slice(0, 10);
+        const p = paidSince(snapshot, it.label, a, from);
+        if (p.amount < closed.totalAmount - 0.05) {
+          if (cdue >= addDays(today, -5)) {
+            out.push({ ...base, due: cdue, bill: closed.totalAmount - p.amount, charges: closed.totalAmount, early: p.amount, ahead: 0, exact: true, closed: true, partPaid: p.amount || 0 });
+            continue;
+          }
+        } else {
+          const due = nextDue(cdue, addDays(cdue, 1));
+          const ob = openBill(a, due);
+          const after = (a.transactions || []).filter((t) => t.amount > 0 && !isCardSidePayment(t) && t.date.slice(0, 10) >= from && t.date.slice(0, 10) <= today).reduce((s, t) => s + t.amount, 0);
+          out.push({ ...base, due, ...(ob.exact ? ob : { bill: after, ahead: 0, exact: false }), paid: { due: cdue, total: closed.totalAmount, amount: p.amount, date: p.date } });
+          continue;
+        }
+      }
       const next = (a.bills || []).filter((b) => b.dueDate.slice(0, 10) >= today).sort((x, y) => x.dueDate.localeCompare(y.dueDate))[0];
       const due = nextDue(a.credit?.balanceDueDate, today) || next?.dueDate.slice(0, 10) || null;
-      out.push({ bank: it.label, name: bankName(it.label), used: a.balance || 0, limit: a.credit?.creditLimit || null, due, typical: typicalBill(a.bills, today), ...openBill(a, due) });
+      out.push({ ...base, due, ...openBill(a, due) });
     }
   }
   return out.sort((a, b) => b.bill - a.bill);
+}
+
+const addDays = (iso, n) => new Date(Date.parse(iso + "T12:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+export const lastClosing = (bills) => (bills || []).map((b) => (b.billClosingDate || "").slice(0, 10)).filter(Boolean).sort().at(-1) || null;
+
+// A card's bill paid on the card side (Nubank: "Pagamento recebido", XP: "Pagamentos Validos Normais").
+export const isCardSidePayment = (t) => t.amount < 0 && (t.operationType === "PAGAMENTO_FATURA" || /^Pagamentos? (recebido|v[aá]lidos)/i.test(String(t.description || "")));
+// A debit in a bank account that pays the card of `bank`: a boleto whose payee is that card's issuer
+// ("Pagamento efetuado|BANCO XP S/A" from the Nubank account pays the XP card).
+const PAYEE = { nubank: /NU PAGAMENTOS/i, xp: /BANCO XP/i };
+export const isCardPayment = (t, bank) => t.amount < 0 && /^Pagamento/i.test(String(t.description || "")) && Boolean(PAYEE[bank]?.test(String(t.description).split("|").slice(1).join("|")));
+
+// What was paid toward a card since `from` (its bill's closing date): on the card itself, or from any account by
+// boleto. The same payment can show on both sides (Nubank pays its own card), so the larger of the two counts.
+export function paidSince(snapshot, bank, card, from) {
+  let side = 0, acct = 0, date = null;
+  const seen = (t) => { const d = t.date.slice(0, 10); if (!date || d > date) date = d; };
+  for (const t of card?.transactions || []) if (isCardSidePayment(t) && t.date.slice(0, 10) >= from) { side -= t.amount; seen(t); }
+  for (const it of snapshot.items) {
+    if (it.error) continue;
+    for (const a of it.accounts) if (a.type !== "CREDIT") for (const t of a.transactions || []) if (t.date.slice(0, 10) >= from && isCardPayment(t, bank)) { acct -= t.amount; seen(t); }
+  }
+  return { amount: Math.max(side, acct), date };
 }
 
 // Maturity ladder: positions grouped by (due date, issuer), with the reinvestment-rule tag.

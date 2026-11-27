@@ -1,25 +1,34 @@
-// Gastos › Histórico: the realistic target (when the current one is always blown) and spending per month.
-import { brl, MES } from "../../lib/format.js";
+// Gastos › Histórico: one bar per closed cycle (the same layout as Parcelas); tap one to see what it was spent on,
+// per group against its limit, what came in, and its largest purchases. The realistic-target card comes last.
+import { brl, ddmm, esc, MES } from "../../lib/format.js";
+import { CLUSTERS } from "../../lib/spend.js";
 import { kBRL } from "./common.js";
 
 export const id = "history";
 export const label = "Histórico";
 
+const SHOWN = 12, FIRST = 12;
+let picked = null; // period id ("YYYY-MM"); null = the latest closed one
+let all = false;
+
+const mon = (ym) => `${MES[Number(ym.slice(5)) - 1]}/${ym.slice(2, 4)}`;
+const k = (n) => (n >= 1000 ? `${(n / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}k` : String(Math.round(n)));
+const GROUP = Object.fromEntries(CLUSTERS.map((c) => [c.id, c.label]));
+
 export function render(t) {
-  const { month: v, avg12, avgN, goals, left: lo } = t;
-  const income = lo?.n ? lo.avg.left + lo.avg.spent : null;
-  return `${goalsCard(goals, v.target, avg12, avgN)}
-    <div class="card">
-      <div class="label">Últimos meses</div>
-      ${chart(v.long || v.history, v.target, income)}
-      <div class="muted">Média ${avgN} ${v.cycle ? "ciclos" : "meses"}: ${brl(avg12)}${income ? ` · entra ${kBRL(income)}` : ""} · meta ${brl(v.target)}</div>
-      ${v.long ? '<div class="muted mt6">Barras claras: só o cartão (extratos de fatura), sem as contas. Ficam fora da média.</div>' : ""}
-      ${v.yearAgo ? `<div class="field mt6"><span>Cartão neste ciclo · mesmo ciclo em ${MES[Number(v.yearAgo.month.slice(5)) - 1]}/${v.yearAgo.month.slice(2, 4)}</span><span>${brl(v.yearAgo.cardNow)} · ${brl(v.yearAgo.card)}</span></div>` : ""}
-    </div>`;
+  const { month: v, avg12, avgN, goals } = t;
+  const ids = Object.keys(t.periods || {}).sort().slice(-SHOWN);
+  if (!ids.length) return '<div class="card empty"><b>Sem histórico</b>Nenhum ciclo fechado ainda.</div>';
+  const sel = ids.includes(picked) ? picked : ids.at(-1);
+  const p = t.periods[sel];
+  return `${barsCard(ids, t.periods, sel, v, avg12, avgN)}${periodCard(p)}${purchasesCard(t, p)}${goalsCard(goals, v.target, avg12, avgN)}`;
 }
 
-export function bind(pane, t, ctx, { rerender }) {
+export function bind(pane, t, ctx, { repaint, rerender }) {
   pane.onclick = (e) => {
+    const m = e.target.closest("[data-hm]")?.dataset.hm;
+    if (m) { picked = m; all = false; repaint(); pane.querySelector("[data-period]")?.scrollIntoView({ block: "nearest", behavior: "smooth" }); return; }
+    if (e.target.closest('[data-a="all-buys"]')) { all = true; repaint(); return; }
     if (e.target.closest('[data-a="goals"]') && t.goals) {
       const g = t.goals;
       ctx.save({ ...ctx.data, settings: { ...(ctx.data.settings || {}), target: g.target, limits: { ...(ctx.data.settings?.limits || {}), ...g.limits } } }).then(rerender);
@@ -27,43 +36,59 @@ export function bind(pane, t, ctx, { rerender }) {
   };
 }
 
+function barsCard(ids, periods, sel, v, avg, n) {
+  const max = Math.max(...ids.map((id) => periods[id].spent), v.target, 1);
+  return `<div class="card">
+      <div class="row"><div class="label">${v.cycle ? "Ciclos" : "Meses"} anteriores</div><b>média ${brl(avg)}</b></div>
+      <div class="muted sm">meta ${brl(v.target)} · média de ${n} · toque num ${v.cycle ? "ciclo" : "mês"}</div>
+      <div class="bill-bars" role="tablist">${ids.map((id) => {
+        const p = periods[id];
+        return `<button role="tab" data-hm="${id}" class="${id === sel ? "sel" : ""}${p.over ? " over" : " under"}${p.cardOnly ? " dim" : ""}" aria-selected="${id === sel}" aria-label="${mon(id)}: ${brl(p.spent)}${p.over ? ", acima da meta" : ""}">
+          <b>${k(p.spent)}</b><i style="height:${Math.max(3, (p.spent / max) * 72)}px"></i><span>${MES[Number(id.slice(5)) - 1]}</span></button>`;
+      }).join("")}</div>
+      <div class="muted xs mt6">Vermelho: passou da meta.${ids.some((id) => periods[id].cardOnly) ? " Desbotado: só o cartão (extrato de fatura)." : ""}</div>
+    </div>`;
+}
+
+function periodCard(p) {
+  const pct = p.target ? Math.min(100, (p.spent / p.target) * 100) : 0;
+  const groups = p.groups.map((g) => `<div><span class="l">${esc(g.label)}${g.limit != null ? `<small>limite ${brl(g.limit)}</small>` : ""}</span><span class="nw"><b>${brl(g.spent)}</b>${g.over ? ` <span class="chip bad">+${brl(g.over)}</span>` : ""}</span></div>`).join("");
+  return `<div class="card" data-period>
+      <div class="row"><div class="label">${p.cycle ? `Ciclo ${ddmm(p.start)} → ${ddmm(p.end)}` : mon(p.id)}</div><span class="chip${p.over ? " bad" : " ok"}">${p.over ? `${brl(p.spent - p.target)} acima` : `sobrou ${brl(p.target - p.spent)}`}</span></div>
+      <div class="row mt6"><div class="hero-row"><span class="kpi">${brl(p.spent)}</span><span class="muted">de ${brl(p.target)}</span></div></div>
+      <div class="track goal-track mt8"><div class="fill" style="width:${pct}%;background:var(${p.over ? "--bad" : "--ok"})"></div></div>
+      ${p.cardOnly ? "" : `<div class="dlist mt8">
+        ${p.income ? `<div><span>Entrou</span><span>${brl(p.income)} · ${p.left >= 0 ? "sobrou" : "faltou"} ${brl(Math.abs(p.left))}</span></div>` : ""}
+        ${p.earned != null ? `<div><span>Investimentos renderam</span><span class="ok">${brl(p.earned)}</span></div>` : ""}
+      </div>`}
+      <div class="sec mt10">Por grupo</div>
+      <div class="list">${groups || '<div class="muted">Nada gasto.</div>'}</div>
+    </div>`;
+}
+
+function purchasesCard(t, p) {
+  const key = t.month.cycle ? "cyc" : "m";
+  const buys = t.rows.filter((r) => r[key] === p.id && r.amt > 0).sort((a, b) => b.amt - a.amt);
+  if (!buys.length) return "";
+  const rows = all ? buys : buys.slice(0, FIRST);
+  return `<div class="card">
+      <div class="row"><div class="label">Maiores gastos</div><span class="muted sm">${buys.length} lançamentos</span></div>
+      <div class="list mt6">${rows.map((r) => `<div><span class="l">${esc(String(r.desc || "").split("|").at(-1).trim() || "—")}<small>${ddmm(r.d)} · ${esc(GROUP[r.cluster] || "Outros")}${r.src === "account" ? " · conta" : ""}</small></span><b class="nw">${brl(r.amt, 2)}</b></div>`).join("")}</div>
+      ${buys.length > rows.length ? `<button class="lnk mt6" data-a="all-buys">mostrar todos (${buys.length}) ›</button>` : ""}
+    </div>`;
+}
+
 // Shown while the target sits more than 10% under the average spend: a target that is always blown stops warning.
 function goalsCard(g, target, avg, n) {
   if (!g || target >= avg * 0.9 || g.target <= target) return "";
-  const lo = Math.min(target, g.target), hi = Math.max(avg, g.income), at = (x) => ((x - lo) / (hi - lo || 1)) * 96 + 2;
   return `<div class="card">
     <div class="row"><div class="label">Meta realista</div><span class="chip bad">meta atual: ${kBRL(target)}</span></div>
     <div class="muted mt6">Sua média é <b class="ink">${kBRL(avg)}</b> por ciclo e entram <b class="ink">${kBRL(g.income)}</b>. Uma meta sempre estourada deixa de avisar.</div>
-    <div class="scale" aria-hidden="true"><div class="ln"></div>
-      <div class="m" style="left:${at(target)}%"><i></i>atual</div>
-      <div class="m sug" style="left:${at(g.target)}%"><i></i>${kBRL(g.target).replace("R$ ", "")}</div>
-      <div class="m inc up" style="left:${at(g.income)}%"><i></i>entra</div>
-      <div class="m avg" style="left:${at(avg)}%"><i></i>média</div></div>
     <div class="split">
       <div class="tile"><span class="label">Sugerida</span><b>${brl(g.target)}</b><span class="muted sm">90% do que entra</span></div>
       <div class="tile"><span class="label">Sobra prevista</span><b class="${g.left >= 0 ? "ok" : "bad"}">${g.left >= 0 ? "+" : "−"}${brl(Math.abs(g.left))}</b><span class="muted sm">por ciclo</span></div>
     </div>
     <button class="btn" data-a="goals">Usar ${kBRL(g.target)} e os limites sugeridos</button>
-    <div class="muted sm mt6">Limites = a mediana de ${n} ciclos de cada grupo, na proporção da meta (um ciclo fora da curva não infla o limite). Dá para editar um a um em Ajustes.</div>
+    <div class="muted sm mt6">Limites = a mediana de ${n} ciclos de cada grupo, na proporção da meta. Dá para editar um a um em Ajustes.</div>
   </div>`;
-}
-
-function chart(history, target, income) {
-  const n = history.length, W = 340, H = 120, max = Math.max(target * 1.2, (income || 0) * 1.1, ...history.map((h) => Math.max(0, h.spent))) || 1, bw = W / n;
-  const y = (v) => H - 20 - (Math.max(0, v) / max) * (H - 30);
-  const w = n > 12 ? bw * 0.7 : bw - 10, pad = (bw - w) / 2;
-  let g = "";
-  history.forEach((h, i) => {
-    const x = i * bw + pad, top = y(h.spent);
-    const label = n <= 12 || (n - 1 - i) % 3 === 0;
-    const mes = MES[Number(h.month.slice(5)) - 1];
-    g += `<rect x="${x}" y="${top}" width="${w}" height="${H - 20 - top}" rx="${n > 12 ? 2 : 4}" fill="var(${h.spent > (income || target) ? "--ink-3" : "--brand"})" opacity="${i === n - 1 ? 1 : h.cardOnly ? 0.25 : 0.55}"><title>${mes}/${h.month.slice(2, 4)} · ${brl(h.spent)}${h.cardOnly ? " · só cartão" : ""}</title></rect>
-      ${label ? `<text x="${x + w / 2}" y="${H - 5}" text-anchor="middle" font-size="10" fill="var(--ink-3)">${n > 12 && h.month.endsWith("-01") ? h.month.slice(2, 4) : mes}</text>` : ""}`;
-  });
-  const kk = (x) => (x >= 1000 ? (x / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "k" : Math.round(x));
-  const halo = 'paint-order="stroke" stroke="var(--surface)" stroke-width="3"';
-  g += `<line x1="0" x2="${W}" y1="${y(target)}" y2="${y(target)}" stroke="var(--brand)" stroke-dasharray="4 4"/>`;
-  if (income) g += `<line x1="0" x2="${W}" y1="${y(income)}" y2="${y(income)}" stroke="var(--ok)" stroke-width="1.5"/><text x="${W}" y="${y(income) - 4}" text-anchor="end" font-size="10" fill="var(--ok)" ${halo}>entra ${kk(income)}</text>`;
-  g += `<text x="2" y="${Math.min(y(target), income ? y(income) : Infinity) - 4}" font-size="10" fill="var(--brand)" ${halo}>meta ${kk(target)} ┄</text>`;
-  return `<svg viewBox="0 0 ${W} ${H}" class="mt10" role="img" aria-label="Gasto por mês, últimos ${n} meses">${g}</svg>`;
 }
