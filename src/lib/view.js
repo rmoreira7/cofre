@@ -7,6 +7,7 @@ import { daysBetween } from "./format.js";
 import { agenda, cashOf } from "./agenda.js";
 import { listsOf } from "./lists.js";
 import { closing, period } from "./closing.js";
+import { projectsView } from "./projects.js";
 import { pace } from "./pace.js";
 import { recurring } from "./recurring.js";
 import { income as investIncome, mergeLog, monthlyHistory, maturityEarnings } from "./income.js";
@@ -52,6 +53,7 @@ export function buildView(data, today) {
   for (const r of v.mat.rows) r.earn = maturityEarnings(r, today, snap.cdi?.daily ?? null);
   v.installments = installmentsAhead(snap, rules, me, today);
   v.bills = billMonths(snap, rules, me, today);
+  v.projects = projectsView(snap, rules, me, v.cards, today, snap.fx || {});
   v.history = monthlyHistory(mergeLog(rules?.invHistory, data.invLog), Object.fromEntries(v.income.banks.map((b) => [b.label, b.net])));
   v.alerts = alerts(v, { idleCash: s.idleCash ?? 5000, cdbMin: s.cdbMin ?? 110 });
   const pOpts = { rows, income, cycles, target: s.target ?? DEFAULT_TARGET, limits: s.limits || {}, log: mergeLog(rules?.invHistory, data.invLog), own: mine.banks.map((b) => b.label) };

@@ -21,6 +21,7 @@ export function render(t) {
         <div class="grow">
           <div class="label">Livre por dia</div><div class="kpi${p.free < 0 ? " bad" : ""}">${brl(p.perDay)}</div>
           <div class="muted mt6">${v.left >= 0 ? `Restam <b class="ink">${brl(v.left)}</b> até ${ddmm(v.end)}` : `Passou <b class="bad">${brl(-v.left)}</b> da meta`}</div>
+          ${(t.projects || []).filter((x) => x.open > 0).map((x) => `<div class="muted sm mt6">inclui ${brl(x.open)} da viagem ${esc(x.name)}</div>`).join("")}
           ${p.committedTotal ? `<div class="muted sm mt6">${p.free >= 0 ? "já tirando" : "e ainda vêm"} ${brl(p.committedTotal)} de contas</div>` : ""}
           ${p.projected ? `<div class="muted sm mt6">No ritmo de sempre, fecha em ~<b class="ink">${kBRL(p.projected)}</b></div>` : ""}
           <span class="chip ${p.tone} mt10">${paceLabel(p, brl)}</span>
