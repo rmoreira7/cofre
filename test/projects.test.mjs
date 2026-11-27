@@ -28,3 +28,23 @@ test("projectsView: gone 30 days after the trip; invalid lists are refused", () 
   assert.equal(validProjects([{ id: "x", name: "y", items: [] }]), false);
   assert.equal(validProjects([{ id: "x", name: "y", items: [{ match: "a", on: "27/05" }] }]), false);
 });
+
+test("Início keeps one row per trip; Gastos › Viagens has the whole of it", async () => {
+  const { render } = await import("../src/screens/spend/trips.js");
+  const { tripChip } = await import("../src/screens/spend/trips.js");
+  const p = { id: "t", name: "Ilha", start: "2027-02-11", end: "2027-02-23", card: 1000, billed: 400, open: 100, ahead: 500, lastAhead: "2027-05", outside: 550, total: 1550,
+    extras: [{ name: "Passeio", amount: 100, currency: "USD", brl: 550, due: "2027-02-17" }], buys: [{ name: "Hotel", bought: "2026-11-07", amount: 1000, n: 10 }] };
+  assert.equal(tripChip(p, "2026-11-27"), "faltam 76 dias");
+  const html = render({ projects: [p], today: "2026-11-27" });
+  assert.match(html, /Ilha · 11\/02 → 23\/02\/27/);
+  assert.match(html, /Parcelas por vir · até mai\/27/);
+  assert.match(html, /US\$ 100,00<small class="muted"> ≈ R\$ 550<\/small>/);
+  assert.match(html, /data-find="Hotel"/);
+  const home = await import("../src/screens/home/summary.js");
+  const v = { month: { month: "2026-12", start: "2026-11-26", end: "2026-12-25", spent: 0, target: 7000, cycle: true, daysLeft: 29 }, pace: null, week: null, projects: [p],
+    cards: [], mat: { rows: [] }, wealth: { total: 0, banks: [] }, income: null, timeline: [], recurring: [], agenda: [] };
+  const h = home.render({ v, board: { open: [] } });
+  assert.match(h, /data-go="spend:trips"/);
+  assert.match(h, /<b class="ink">R\$ 1\.550<\/b> no total · R\$ 100 nesta fatura/);
+  assert.doesNotMatch(h, /Já faturado/);
+});

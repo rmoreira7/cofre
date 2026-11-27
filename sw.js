@@ -1,6 +1,6 @@
 // Caches the app shell only. API calls (api.pluggy.ai) are never cached here:
 // the data lives encrypted in IndexedDB, not in the HTTP cache.
-const CACHE = "cofre-0.39.0";
+const CACHE = "cofre-0.40.0";
 const SHELL = [
   "./", "index.html", "oauth.html", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png",
   "icons/icon-512.png", "src/app.css", "src/tokens.css", "src/lib/agenda.js", "src/lib/bio.js",
@@ -20,7 +20,8 @@ const SHELL = [
   "src/screens/settings/index.js", "src/screens/settings/security.js", "src/screens/spend/bills.js",
   "src/screens/spend/common.js", "src/screens/spend/cycle.js", "src/screens/spend/groups.js",
   "src/screens/spend/history.js", "src/screens/spend/index.js", "src/screens/spend/search.js",
-  "src/screens/spend/subs.js", "src/ui/agenda.js", "src/ui/earn.js", "src/ui/shell.js", "src/ui/tabbed.js",
+  "src/screens/spend/subs.js", "src/screens/spend/trips.js", "src/ui/agenda.js", "src/ui/earn.js",
+  "src/ui/shell.js", "src/ui/tabbed.js",
 ];
 
 self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())));

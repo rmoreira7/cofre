@@ -4,13 +4,14 @@ import { GO } from "../../ui/shell.js";
 import { agendaRow } from "../../ui/agenda.js";
 import { agendaTotals } from "../../lib/agenda.js";
 import { paceLabel } from "../../lib/pace.js";
+import { tripChip } from "../spend/trips.js";
 
 export const id = "summary";
 export const label = "Resumo";
 
 export function render(t) {
   const { v, board } = t;
-  return `${cycleSummary(v)}${(v.projects || []).map((p) => tripCard(p, v.today)).join("")}
+  return `${cycleSummary(v)}${(v.projects || []).map((p) => tripRow(p, v.today)).join("")}
     ${decisionsSummary(board.open)}
     ${foundSummary(v.recurring)}
     ${timelineCard(v.timeline)}
@@ -33,23 +34,12 @@ function decisionsSummary(open) {
     </button>`;
 }
 
-// A trip (rules file › projects): its whole cost, by where it is in the bills, plus what is paid at the hotel.
-function tripCard(p, today) {
-  const days = p.start ? Math.round((Date.parse(p.start + "T12:00:00Z") - Date.parse(today + "T12:00:00Z")) / 864e5) : null;
-  const chip = days == null ? "" : days > 0 ? `faltam ${days} dias` : p.end && today <= p.end ? "em viagem" : "terminou";
-  const fx = (e) => (e.currency === "BRL" ? brl(e.amount, 2) : `${e.currency === "USD" ? "US$" : e.currency} ${e.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-  const extra = p.extras.map((e) => `<div><span>${esc(e.name)}${e.due ? ` · ${ddmm(e.due)}` : ""}</span><span>${fx(e)}${e.currency !== "BRL" && e.brl ? ` <small class="muted">≈ ${brl(e.brl)}</small>` : ""}</span></div>`).join("");
-  return `<div class="card sum-card">
-      <div class="row"><div class="label">Viagem · ${esc(p.name)}</div>${chip ? `<span class="chip">${chip}</span>` : ""}</div>
-      <div class="row mt6"><div class="hero-row"><span class="kpi">${brl(p.total)}</span><span class="muted">no total</span></div></div>
-      <div class="dlist mt8">
-        <div><span>Já faturado</span><span>${brl(p.billed)}</span></div>
-        <div><span>Na fatura aberta (este ciclo)</span><span>${brl(p.open)}</span></div>
-        ${p.ahead ? `<div><span>Parcelas por vir${p.lastAhead ? ` · até ${MES[Number(p.lastAhead.slice(5)) - 1]}/${p.lastAhead.slice(2, 4)}` : ""}</span><span>${brl(p.ahead)}</span></div>` : ""}
-        ${extra}
-      </div>
-      <details class="mt6"><summary class="muted sm">${p.buys.length} compras no cartão</summary><div class="list mt6">${p.buys.map((b) => `<div><span class="l">${esc(b.name)}<small>${ddmm(b.bought)}${b.n > 1 ? ` · ${b.n}x` : ""}</small></span><b class="nw">${brl(b.amount, 2)}</b></div>`).join("")}</div></details>
-    </div>`;
+// A trip: one row; the details are in Gastos › Viagens.
+function tripRow(p, today) {
+  return `<button class="card tap-card sum-card" data-go="spend:trips">
+      <div class="row"><div class="label">Viagem · ${esc(p.name)}</div><span class="nw">${tripChip(p, today) ? `<span class="chip">${tripChip(p, today)}</span> ` : ""}${GO}</span></div>
+      <div class="muted"><b class="ink">${brl(p.total)}</b> no total${p.open ? ` · ${brl(p.open)} nesta fatura` : ""}</div>
+    </button>`;
 }
 
 // Monthly charges found in the statements that are in no list: a nudge to Ajustes › Contas.
