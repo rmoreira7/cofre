@@ -8,7 +8,7 @@ import { agenda, cashOf } from "./agenda.js";
 import { listsOf } from "./lists.js";
 import { closing, period } from "./closing.js";
 import { projectsView } from "./projects.js";
-import { pace } from "./pace.js";
+import { pace, weekBudget } from "./pace.js";
 import { recurring, subscriptions } from "./recurring.js";
 import { income as investIncome, mergeLog, monthlyHistory, maturityEarnings } from "./income.js";
 
@@ -61,6 +61,7 @@ export function buildView(data, today) {
   // Gastos › Histórico: every past period on the chart, summarised like the month-end one.
   v.periods = Object.fromEntries((month.long || month.history).filter((h) => h.month !== month.month).map((h) => [h.month, { ...period(h.month, pOpts), cardOnly: Boolean(h.cardOnly) }]));
   v.pace = pace(month, { rows, cycles, monthly: lists.monthly, renewals: lists.renewals, snapshot: snap, today });
+  v.week = weekBudget(month, v.pace, rows, { today, cycles });
   v.recurring = recurring(rows, { lists, ignored: data.ignoredRecurring || [], today });
   v.subscriptions = subscriptions(rows, { lists, today, hidden: data.hiddenSubs || [] });
   v.cash = cashOf(mine, { earmark: s.billReserve || 0 });

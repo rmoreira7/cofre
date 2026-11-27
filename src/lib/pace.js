@@ -57,3 +57,27 @@ export function pace(month, { rows, cycles = null, monthly = [], renewals = [], 
 
 // "R$ 400 acima do ritmo" / "abaixo" / "no ritmo", for a chip.
 export const paceLabel = (p, brl) => (p.tone === "bad" ? "acima da meta" : p.early ? "começo do ciclo" : p.tone === "warn" ? `${brl(p.delta)} acima do ritmo` : p.tone === "ok" ? `${brl(-p.delta)} abaixo do ritmo` : "no ritmo");
+
+// Início's week: a budget fixed for the whole week (Monday to Sunday, cut to the cycle's own days): what was free when
+// the week began, in proportion to the days of the cycle the week covers. Each purchase of the week spends from it.
+// "after": what stays free once this week's budget is spent, per week for the rest of the cycle.
+// → { start, end, days, budget, spent, left, after: { perWeek, weeks } | null } or { start, end, days, over: true }.
+const weekMonday = (iso) => addDays(iso, -((new Date(iso + "T12:00:00Z").getUTCDay() + 6) % 7));
+export function weekBudget(month, p, rows, { today, cycles = null }) {
+  if (!month?.start || !p) return null;
+  const key = cycles ? "cyc" : "m";
+  const start = weekMonday(today) < month.start ? month.start : weekMonday(today);
+  const sunday = addDays(weekMonday(today), 6), end = sunday > month.end ? month.end : sunday;
+  const spent = rows.filter((r) => r[key] === month.month && !r.hist && !r.ahead && r.d >= start && r.d <= today).reduce((a, r) => a + r.amt, 0);
+  const days = daysBetween(start, end) + 1, cycleDays = daysBetween(start, month.end) + 1;
+  const freeAtStart = p.free + spent;
+  if (freeAtStart <= 0) return { start, end, days, spent, over: true, by: -p.free };
+  const budget = (freeAtStart * days) / cycleDays;
+  const left = budget - spent;
+  const daysAfter = daysBetween(end, month.end);
+  const freeAfter = p.free - Math.max(0, left);
+  return {
+    start, end, days, budget, spent, left,
+    after: daysAfter > 0 ? { perWeek: Math.max(0, freeAfter) / (daysAfter / 7), weeks: Math.ceil(daysAfter / 7) } : null,
+  };
+}

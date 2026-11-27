@@ -70,6 +70,7 @@ function cycleSummary(v) {
       <div class="row mt6"><div class="hero-row"><span class="kpi">${brl(m.spent)}</span><span class="muted">de ${brl(m.target)}</span></div>${GO}</div>
       <div class="track goal-track mt8"><div class="fill" style="width:${Math.min(100, p)}%;background:var(${m.over ? "--bad" : p > 80 ? "--warn" : "--brand"})"></div></div>
       ${v.pace ? `<div class="muted sm mt6"><b class="${v.pace.tone}">${paceLabel(v.pace, brl)}</b>${v.pace.committedTotal ? ` · ainda vêm ${brl(v.pace.committedTotal)} de contas` : ""}</div>` : ""}
+      ${weekRow(v.week)}
       <div class="to">${m.over ? `${brl(m.spent - m.target)} acima da meta` : `${brl(v.pace ? v.pace.perDay : m.perDay)}/dia livre até ${ddmm(m.end)}`} · Gastos › Ciclo</div>
     </button>`;
 }
@@ -109,4 +110,17 @@ function timelineCard(list) {
     <div class="row"><div class="label">Próximos 30 dias</div><span class="muted sm">${pay ? `a pagar ${brl(pay)}` : "entra · sai · vence"}</span></div>
     <div class="row"><div class="tl mt6 grow">${list.slice(0, SHOWN).map(agendaRow).join("")}</div>${GO}</div>
     <div class="to">${list.length > SHOWN ? `+ ${list.length - SHOWN} · ` : ""}Início › Agenda</div></button>`;
+}
+
+const WD = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+const wd = (iso) => `${WD[new Date(iso + "T12:00:00Z").getUTCDay()]} ${Number(iso.slice(8, 10))}`;
+// This week against its own budget (src/lib/pace.js weekBudget), and what is left per week after it.
+function weekRow(w) {
+  if (!w) return "";
+  const head = `<div class="row mt10"><span class="label">Esta semana · ${wd(w.start)} → ${wd(w.end)}</span>`;
+  if (w.over) return `<div class="wk">${head}<b class="nw">${brl(w.spent)}</b></div><div class="muted sm bad">sem folga: ${brl(w.by)} acima da meta</div></div>`;
+  const pct = Math.min(100, (w.spent / w.budget) * 100), over = w.left < 0;
+  return `<div class="wk">${head}<span class="nw"><b>${brl(w.spent)}</b> <span class="muted">de ${brl(w.budget)}</span></span></div>
+      <div class="track mt6"><div class="fill" style="width:${pct}%;background:var(${over ? "--bad" : pct > 80 ? "--warn" : "--brand"})"></div></div>
+      <div class="muted sm mt6">${over ? `<b class="bad">${brl(-w.left)} acima</b> do valor da semana` : `sobram <b class="ink">${brl(w.left)}</b> até ${wd(w.end).split(" ")[0] === "dom" ? "domingo" : wd(w.end)}`}${w.after ? ` · depois ~${brl(w.after.perWeek)}/semana (${w.after.weeks} ${w.after.weeks === 1 ? "semana" : "semanas"})` : ""}</div></div>`;
 }
