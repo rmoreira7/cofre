@@ -148,3 +148,13 @@ test("Gastos › Histórico: one bar per closed period, the latest picked, its g
   assert.match(html, /Restaurante Teste/);
   assert.doesNotMatch(home.subs.find((x) => x.id === "summary").render(home.context(ctx), ctx), /Fechamento/);
 });
+
+test("Histórico: a group far from its usual gets ▲/▼; a small gap does not", async () => {
+  const { vsUsual } = await import("../src/screens/spend/history.js");
+  assert.equal(vsUsual(3900, 3000), 900);
+  assert.equal(vsUsual(2000, 3000), -1000);
+  assert.equal(vsUsual(3100, 3000), null);
+  assert.equal(vsUsual(250, 100), 150);
+  assert.equal(vsUsual(50, 100), null);
+  assert.equal(vsUsual(500, 0), null);
+});

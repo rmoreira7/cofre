@@ -21,7 +21,7 @@ export function render(t) {
   if (!ids.length) return '<div class="card empty"><b>Sem histórico</b>Nenhum ciclo fechado ainda.</div>';
   const sel = ids.includes(picked) ? picked : ids.at(-1);
   const p = t.periods[sel];
-  return `${barsCard(ids, t.periods, sel, v, avg12, avgN)}${periodCard(p)}${purchasesCard(t, p)}${goalsCard(goals, v.target, avg12, avgN)}`;
+  return `${barsCard(ids, t.periods, sel, v, avg12, avgN)}${periodCard(p, t.trends)}${purchasesCard(t, p)}${goalsCard(goals, v.target, avg12, avgN)}`;
 }
 
 export function bind(pane, t, ctx, { repaint, rerender }) {
@@ -50,9 +50,21 @@ function barsCard(ids, periods, sel, v, avg, n) {
     </div>`;
 }
 
-function periodCard(p) {
+// Against the usual: the group's median over the last 12 closed cycles. Shown when the gap is worth a look.
+export function vsUsual(spent, usual) {
+  if (!(usual > 0)) return null;
+  const d = spent - usual;
+  return Math.abs(d) >= Math.max(100, usual * 0.2) ? d : null;
+}
+
+function periodCard(p, trends = {}) {
   const pct = p.target ? Math.min(100, (p.spent / p.target) * 100) : 0;
-  const groups = p.groups.map((g) => `<div><span class="l">${esc(g.label)}${g.limit != null ? `<small>limite ${brl(g.limit)}</small>` : ""}</span><span class="nw"><b>${brl(g.spent)}</b>${g.over ? ` <span class="chip bad">+${brl(g.over)}</span>` : ""}</span></div>`).join("");
+  const groups = p.groups.map((g) => {
+    const usual = trends[g.id]?.median, d = vsUsual(g.spent, usual);
+    const sub = [g.limit != null ? `limite ${brl(g.limit)}` : "", usual > 0 ? `usual ${brl(usual)}` : ""].filter(Boolean).join(" · ");
+    const gap = d == null ? "" : ` <span class="sm ${d > 0 ? "bad" : "ok"}">${d > 0 ? "▲ +" : "▼ −"}${brl(Math.abs(d))}</span>`;
+    return `<div><span class="l">${esc(g.label)}${sub ? `<small>${sub}</small>` : ""}</span><span class="nw"><b>${brl(g.spent)}</b>${gap}</span></div>`;
+  }).join("");
   return `<div class="card" data-period>
       <div class="row"><div class="label">${p.cycle ? `Ciclo ${ddmm(p.start)} → ${ddmm(p.end)}` : mon(p.id)}</div><span class="chip${p.over ? " bad" : " ok"}">${p.over ? `${brl(p.spent - p.target)} acima` : `sobrou ${brl(p.target - p.spent)}`}</span></div>
       <div class="row mt6"><div class="hero-row"><span class="kpi">${brl(p.spent)}</span><span class="muted">de ${brl(p.target)}</span></div></div>
@@ -61,7 +73,7 @@ function periodCard(p) {
         ${p.income ? `<div><span>Entrou</span><span>${brl(p.income)} · ${p.left >= 0 ? "sobrou" : "faltou"} ${brl(Math.abs(p.left))}</span></div>` : ""}
         ${p.earned != null ? `<div><span>Investimentos renderam</span><span class="ok">${brl(p.earned)}</span></div>` : ""}
       </div>`}
-      <div class="sec mt10">Por grupo</div>
+      <div class="sec mt10">Por grupo <span class="muted">· ▲▼ vs. o usual (mediana de 12 ciclos)</span></div>
       <div class="list">${groups || '<div class="muted">Nada gasto.</div>'}</div>
     </div>`;
 }
