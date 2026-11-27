@@ -17,7 +17,7 @@ import * as investments from "./screens/investments/index.js";
 import * as projection from "./screens/projection/index.js";
 import * as settings from "./screens/settings/index.js";
 
-export const APP_VERSION = "0.34.0";
+export const APP_VERSION = "0.34.1";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 const SCREENS = { home, spend, investments, projection, settings };
 
@@ -28,11 +28,11 @@ const bio = createBio(idbStorage("cofre", "vault", "bio"), {
   credentials: navigator.credentials, rpId: location.hostname,
   isAvailable: () => window.PublicKeyCredential?.isUserVerifyingPlatformAuthenticatorAvailable?.() ?? false,
 });
-const state = { data: null, current: "home", view: null, progress: "", busy: false, bio: { available: false, enrolled: false }, sub: loadSubs(), sync: null };
+const state = { data: null, current: "home", view: null, progress: "", busy: false, bio: { available: false, enrolled: false }, sub: {}, sync: null };
 
-// The last sub-tab of each tab: a per-device convenience, so it lives in localStorage (and works without it).
-function loadSubs() { try { return JSON.parse(localStorage.getItem("cofre.sub") || "{}"); } catch { return {}; } }
-function saveSubs() { try { localStorage.setItem("cofre.sub", JSON.stringify(state.sub)); } catch { /* private mode */ } }
+// No sub-tab is remembered (Rafael): a tab opens on its first one. state.sub only keeps the one on screen while it
+// re-renders (a refresh), or the one a link asks for. The old saved choice is dropped.
+try { localStorage.removeItem("cofre.sub"); } catch { /* private mode */ }
 
 const ctx = {
   version: APP_VERSION,
@@ -192,7 +192,7 @@ async function refresh() {
 }
 
 function go(name, sub) {
-  if (sub) { state.sub[name] = sub; saveSubs(); }
+  if (sub) state.sub[name] = sub;
   state.current = name;
   tabs.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.s === name));
   app.innerHTML = "";
@@ -376,7 +376,7 @@ app.addEventListener("click", (e) => {
   const st = e.target.closest("[data-sub]");
   if (st) {
     const sec = st.closest("section"), id = st.dataset.sub;
-    state.sub[state.current] = id; saveSubs();
+    state.sub[state.current] = id;
     sec.querySelectorAll("[data-sub]").forEach((b) => { b.classList.toggle("on", b.dataset.sub === id); b.setAttribute("aria-selected", b.dataset.sub === id); });
     sec.querySelectorAll("[data-pane]").forEach((p) => { p.hidden = p.dataset.pane !== id; });
     window.scrollTo(0, 0);
@@ -386,10 +386,10 @@ app.addEventListener("click", (e) => {
   if (g) { const [tab, sub] = g.split(":"); go(tab, sub); }
 });
 
-// A tap on the bottom bar always opens the tab's first sub-tab (Rafael); a refresh or a link keeps or picks its own.
+// A tap on the bottom bar always opens the tab's first sub-tab.
 tabs.addEventListener("click", (e) => {
   const b = e.target.closest("button");
-  if (b) { delete state.sub[b.dataset.s]; saveSubs(); go(b.dataset.s); }
+  if (b) { state.sub = {}; go(b.dataset.s); }
 });
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
