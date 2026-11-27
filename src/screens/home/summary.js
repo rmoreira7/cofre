@@ -74,13 +74,14 @@ function cycleSummary(v) {
     </button>`;
 }
 
+// Every connected bank together, the joint account included (as in Investimentos › Rendimentos).
 function wealthSummary(v) {
-  const own = v.mine.total, x = v.income;
-  const perMonth = x?.cdiDaily && x.own.net > 0;
+  const x = v.income;
+  const perMonth = x?.cdiDaily && x.all.net > 0;
   return `<button class="card tap-card sum-card" data-go="investments:wallet">
       <div class="label">Patrimônio</div>
-      <div class="row"><div class="hero-row"><span class="kpi">${mil(v.wealth.total)}</span>${v.wealth.banks.some((b) => b.joint) ? `<span class="muted sm">seu ${mil(own)}</span>` : ""}</div>${GO}</div>
-      ${perMonth ? `<div class="muted sm">rende ≈ <b class="ok">${brl(x.own.net)}/mês</b> líquido${x.joint.n ? ` · conjunta + ${brl(x.joint.net)}` : ""}</div>` : ""}
+      <div class="row"><div class="hero-row"><span class="kpi">${mil(v.wealth.total)}</span></div>${GO}</div>
+      ${perMonth ? `<div class="muted sm">rende ≈ <b class="ok">${brl(x.all.net)}/mês</b> líquido</div>` : ""}
       <div class="to">Investimentos › Carteira</div>
     </button>`;
 }
