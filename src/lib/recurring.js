@@ -30,15 +30,24 @@ export function recurring(rows, { lists = {}, ignored = [], today }) {
 }
 
 // Every charge that keeps coming back monthly, whatever list it is in (Gastos › Assinaturas).
+// A merchant that renames its charge ("Netflix.Com" → "Netflix Entretenimento") splits into two groups too short to
+// count: what is left after the first pass is grouped again by the store's first word (5+ letters) and checked the same way.
 function detect(rows, today) {
-  const groups = new Map();
-  for (const r of rows) {
-    if (r.amt <= 0 || r.inst || r.hist || SKIP.has(r.cat) || daysBetween(r.d, today) > WINDOW) continue;
-    const k = recurringKey(r);
-    (groups.get(k) || groups.set(k, []).get(k)).push(r);
+  const by = (xs, keyOf) => { const g = new Map(); for (const r of xs) { const k = keyOf(r); if (k) (g.get(k) || g.set(k, []).get(k)).push(r); } return g; };
+  const live = rows.filter((r) => !(r.amt <= 0 || r.inst || r.hist || SKIP.has(r.cat) || daysBetween(r.d, today) > WINDOW));
+  const out = [], used = new Set();
+  for (const [key, xs] of by(live, recurringKey)) { const f = evaluate(key, xs, today); if (f) { out.push(f); xs.forEach((r) => used.add(r)); } }
+  const first = (r) => { const w = plain(niceName(r.desc).split(/[\s.*]+/)[0]); return w.length >= 5 ? `${r.src}:~${w}` : null; };
+  for (const [key, xs] of by(live.filter((r) => !used.has(r)), first)) {
+    if (by(xs, recurringKey).size < 2) continue; // one name only: the first pass already said no
+    const f = evaluate(key, xs, today);
+    if (f) out.push(f);
   }
-  const out = [];
-  for (const [key, xs] of groups) {
+  return out.sort((a, b) => b.last.localeCompare(a.last));
+}
+
+function evaluate(key, xs, today) {
+  {
     xs.sort((a, b) => a.d.localeCompare(b.d));
     // The trailing run of roughly monthly charges (a single missed month allowed).
     let i = xs.length - 1, good = 0;
@@ -48,11 +57,11 @@ function detect(rows, today) {
       i--;
     }
     let run = xs.slice(i);
-    if (good < 2 || daysBetween(run.at(-1).d, today) > ACTIVE) continue;
+    if (good < 2 || daysBetween(run.at(-1).d, today) > ACTIVE) return null;
     const stable = (r) => { const u = median(r.map((x) => x.amt)); return r.every((x) => Math.abs(x.amt - u) <= u * TOLERANCE); };
     // A price raise past the tolerance still is the same charge: the run before it held, the last is up to 50 % more.
     const before = run.slice(0, -1), jump = run.at(-1).amt / median(before.map((x) => x.amt));
-    if (!stable(run) && !(before.length >= 2 && stable(before) && jump > 1 && jump <= 1.5)) continue;
+    if (!stable(run) && !(before.length >= 2 && stable(before) && jump > 1 && jump <= 1.5)) return null;
     const last = run.at(-1);
     // Raised: a fixed price (the two charges before it equal to the cent) and the last one higher.
     const c = (n) => Math.round(n * 100), [p2, p1] = run.slice(-3, -1).map((x) => x.amt);
@@ -62,15 +71,15 @@ function detect(rows, today) {
     // A fixed day of the month when the charges keep to it (month ends wrap: the 30th and the 2nd are 3 days apart).
     const day = Math.round(median(days)), drift = Math.max(...days.map((d) => Math.min(Math.abs(d - day), 31 - Math.abs(d - day))));
     const name = merchant(last.desc);
-    out.push({
+    return {
       key, name: name.toLowerCase().replace(/(^|\s)\p{L}/gu, (c) => c.toUpperCase()), src: last.src, card: last.src === "card",
       amount: Math.round(last.amt * 100) / 100, match: [name],
       ...(drift <= 4 ? { day: Math.min(28, day) } : { every: Math.round(median(run.slice(1).map((x, j) => daysBetween(run[j].d, x.d)).filter(monthly))) }),
       last: last.d, n: run.length, desc: last.desc, cluster: last.cluster, ...(raise && { raise }),
-    });
+    };
   }
-  return out.sort((a, b) => b.last.localeCompare(a.last));
 }
+
 
 // Gastos › Assinaturas: what keeps costing every month or year. The charges found in the statements, plus the renewals
 // and contas do mês with a price that no charge accounts for yet (an annual plan, a bill paid by boleto). A renewal
@@ -82,7 +91,7 @@ function detect(rows, today) {
 // Before a "*" is the store, unless it is a payment processor's code (then the store comes after it). A word that
 // comes back later moves there; one-letter and billing words go; a few brands get their own spelling.
 const PROC = new Set(["mp", "dm", "mep", "ebw", "ebn", "zig", "ifd", "pg", "pag", "pags", "pagseguro", "cappta", "jim.com", "izi", "iz", "ec", "dl", "sumup", "stone", "pagar.me", "paypal", "mercadopago", "ppro", "emv", "pix"]);
-const BILLING = new Set(["fatura", "credit", "pagamento", "pgto", "pgt", "assinatura", "mensalidade", "recorrente"]);
+const BILLING = new Set(["fatura", "credit", "entretenimento", "ltda", "ltda.", "eireli", "s/a", "s.a.", "pagamento", "pgto", "pgt", "assinatura", "mensalidade", "recorrente"]);
 const BRAND = { youtube: "YouTube", ifood: "iFood", iphone: "iPhone", icloud: "iCloud", hbo: "HBO", tv: "TV", xp: "XP", mercadolivre: "Mercado Livre", amazonmktplc: "Amazon" };
 const title = (x) => (x === x.toUpperCase() || x === x.toLowerCase() ? x.charAt(0).toUpperCase() + x.slice(1).toLowerCase() : x);
 export function niceName(desc) {

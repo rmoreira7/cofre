@@ -64,3 +64,10 @@ test("a fixed price that goes up is a raise: a chip on the row and one Telegram 
   const big = plan.slice(0, 3).concat(charge("2026-11-24", "Socio Clube", 500, "card", "leis"));
   assert.equal(subscriptions(big, { lists: {}, today }).monthly.length, 0);
 });
+
+test("a charge that changes its name but keeps its price and day is still one subscription", () => {
+  const xs = [charge("2026-09-20", "Streamco.Com", 20.9), charge("2026-10-20", "Streamco.Com", 20.9), charge("2026-11-20", "Streamco Entretenimento", 20.9),
+    charge("2026-10-03", "Padaria Boa", 15), charge("2026-11-03", "Padaria Nova", 15)];
+  const s = subscriptions(xs, { lists: {}, today });
+  assert.deepEqual(s.monthly.map((m) => [m.name, m.amount]), [["Streamco", 20.9]]);
+});
